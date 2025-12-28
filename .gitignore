@@ -1,0 +1,25 @@
+# Node
+node_modules/
+npm-debug.log*
+yarn-error.log*
+
+# Env
+.env
+.env.local
+.env.production
+
+# Build
+dist/
+build/
+.next/
+
+# Logs
+logs/
+*.log
+
+# Supabase
+supabase/.temp/
+
+# OS
+.DS_Store
+Thumbs.db

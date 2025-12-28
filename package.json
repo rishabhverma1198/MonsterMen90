@@ -1,0 +1,38 @@
+{
+  "name": "monster-men90-platform",
+  "version": "1.0.0",
+  "description": "Monster Men90 E-commerce Platform - Frontend and Backend",
+  "scripts": {
+    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "dev:backend": "cd MonsterBackend && npm run dev",
+    "dev:frontend": "cd MonsterFrontend && npm run dev",
+    "start": "concurrently \"npm run start:backend\" \"npm run start:frontend\"",
+    "start:backend": "cd MonsterBackend && npm start",
+    "start:frontend": "cd MonsterFrontend && npm run preview",
+    "build": "npm run build:frontend && npm run build:backend",
+    "build:frontend": "cd MonsterFrontend && npm run build",
+    "build:backend": "cd MonsterBackend && npm run build",
+    "install": "npm run install:backend && npm run install:frontend",
+    "install:backend": "cd MonsterBackend && npm install",
+    "install:frontend": "cd MonsterFrontend && npm install",
+    "clean": "npm run clean:backend && npm run clean:frontend",
+    "clean:backend": "cd MonsterBackend && rm -rf node_modules package-lock.json",
+    "clean:frontend": "cd MonsterFrontend && rm -rf node_modules dist package-lock.json",
+    "setup": "npm install && npm run install:backend && npm run install:frontend",
+    "test": "npm run test:backend && npm run test:frontend",
+    "test:backend": "cd MonsterBackend && npm test",
+    "test:frontend": "cd MonsterFrontend && npm test"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  },
+  "keywords": [
+    "ecommerce",
+    "react",
+    "nodejs",
+    "fullstack",
+    "monster-men90"
+  ],
+  "author": "Monster Men90 Team",
+  "license": "MIT"
+}
