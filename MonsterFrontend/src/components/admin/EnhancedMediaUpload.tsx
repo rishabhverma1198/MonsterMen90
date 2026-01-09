@@ -6,6 +6,7 @@ import { Progress } from '@/components/ui/progress';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { mediaCompressionService } from '@/lib/services/media-compression.service';
 import type { MediaFile, CompressionOptions } from '@/lib/services/media-compression.service';
+import { supabase } from '@/lib/supabase';
 
 interface EnhancedMediaUploadProps {
   onFilesUploaded: (files: MediaFile[]) => void;
@@ -20,7 +21,53 @@ interface UploadedFile {
   status: 'uploading' | 'completed' | 'error';
   progress: number;
   error?: string;
+  url?: string;
 }
+
+// Supabase Storage upload function
+export const uploadToSupabase = async (
+  file: File, 
+  bucket: string = 'product-media',
+  folder: string = 'products'
+): Promise<{ url: string; path: string }> => {
+  const timestamp = Date.now();
+  const randomStr = Math.random().toString(36).substring(2, 8);
+  const fileExt = file.name.split('.').pop();
+  const fileName = `${timestamp}-${randomStr}.${fileExt}`;
+  const filePath = `${folder}/${fileName}`;
+  
+  const { data, error } = await supabase.storage
+    .from(bucket)
+    .upload(filePath, file, {
+      cacheControl: '3600',
+      upsert: false
+    });
+  
+  if (error) {
+    throw new Error(`Upload failed: ${error.message}`);
+  }
+  
+  // Get public URL
+  const { data: { publicUrl } } = supabase.storage
+    .from(bucket)
+    .getPublicUrl(filePath);
+  
+  return { url: publicUrl, path: data.path };
+};
+
+// Delete file from Supabase Storage
+export const deleteFromSupabase = async (
+  path: string,
+  bucket: string = 'product-media'
+): Promise<void> => {
+  const { error } = await supabase.storage
+    .from(bucket)
+    .remove([path]);
+  
+  if (error) {
+    throw new Error(`Delete failed: ${error.message}`);
+  }
+};
 
 export default function EnhancedMediaUpload({
   onFilesUploaded,
@@ -31,7 +78,6 @@ export default function EnhancedMediaUpload({
 }: EnhancedMediaUploadProps) {
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
   const [isDragOver, setIsDragOver] = useState(false);
-  // const [isUploading, setIsUploading] = useState(false); // Not needed for current implementation
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const compressionOptions: CompressionOptions = {
@@ -66,8 +112,6 @@ export default function EnhancedMediaUpload({
   };
 
   const uploadFile = async (file: File) => {
-    // const fileId = Date.now() + Math.random(); // Not needed for current implementation
-    
     // Add to upload list with uploading status
     const newUploadedFile: UploadedFile = {
       file: {
@@ -88,16 +132,30 @@ export default function EnhancedMediaUpload({
       // Compress the file
       const compressedFile = await mediaCompressionService.compressFile(file, compressionOptions);
       
+      // Update progress to 50% after compression
+      setUploadedFiles(prev => prev.map(f => 
+        f.file.file === file 
+          ? { ...f, file: compressedFile, progress: 50 }
+          : f
+      ));
+      
+      // Upload to Supabase Storage
+      const bucket = compressedFile.type === 'video' ? 'product-videos' : 'product-images';
+      const { url } = await uploadToSupabase(compressedFile.file as File, bucket);
+      
+      // Update the file with the URL
+      const finalFile = { ...compressedFile, url };
+      
       // Update progress to 100%
       setUploadedFiles(prev => prev.map(f => 
         f.file.file === file 
-          ? { ...f, file: compressedFile, status: 'completed', progress: 100 }
+          ? { ...f, file: finalFile, status: 'completed', progress: 100, url }
           : f
       ));
 
       // Notify parent component
-      const completedFiles = [...uploadedFiles, { ...newUploadedFile, file: compressedFile, status: 'completed', progress: 100 }]
-        .filter(f => f.status === 'completed')
+      const completedFiles = uploadedFiles
+        .filter(f => f.file.file === file || f.status === 'completed')
         .map(f => f.file);
       
       onFilesUploaded(completedFiles);
@@ -112,7 +170,29 @@ export default function EnhancedMediaUpload({
     }
   };
 
-  const removeFile = (index: number) => {
+  const removeFile = async (index: number) => {
+    const fileToRemove = uploadedFiles[index];
+    
+    // If file is completed, delete from Supabase Storage
+    if (fileToRemove.status === 'completed' && fileToRemove.url) {
+      try {
+        // Extract path from URL (simplified - you may need to adjust based on your URL structure)
+        const urlParts = fileToRemove.url.split('/');
+        const pathIndex = urlParts.indexOf('product-media') !== -1 
+          ? urlParts.indexOf('product-media') 
+          : urlParts.indexOf('product-videos');
+        const path = urlParts.slice(pathIndex).join('/');
+        
+        // Only delete if we have a valid path
+        if (path && !path.includes('localhost')) {
+          await deleteFromSupabase(path, fileToRemove.file.type === 'video' ? 'product-videos' : 'product-images');
+        }
+      } catch (deleteError) {
+        console.warn('Failed to delete from storage:', deleteError);
+        // Continue with local removal even if storage deletion fails
+      }
+    }
+    
     setUploadedFiles(prev => prev.filter((_, i) => i !== index));
   };
 
@@ -225,7 +305,9 @@ export default function EnhancedMediaUpload({
                       
                       <div className="text-sm text-gray-500">
                         {uploadedFile.status === 'uploading' && (
-                          <span>Compressing...</span>
+                          <span>
+                            {uploadedFile.progress < 50 ? 'Compressing...' : 'Uploading...'}
+                          </span>
                         )}
                         {uploadedFile.status === 'completed' && (
                           <span>
@@ -283,7 +365,7 @@ export default function EnhancedMediaUpload({
       <Alert>
         <FileText className="w-4 h-4" />
         <AlertDescription>
-          <strong>Auto-compression enabled:</strong> Images are resized to max 1200x1200px and videos are compressed to optimize loading speed.
+          <strong>Auto-compression enabled:</strong> Images are resized to max 1200x1200px and videos are compressed to optimize loading speed. Files are uploaded to Supabase Storage.
         </AlertDescription>
       </Alert>
     </div>

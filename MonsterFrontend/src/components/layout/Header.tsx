@@ -1,8 +1,8 @@
 import React, { type FormEvent, type ChangeEvent, type ReactNode, type ErrorInfo } from "react";
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useState, useCallback, useMemo, memo } from "react";
-import { useCart } from "../../hooks/useCart";
-import { useAuth } from "../../hooks/useAuth";
+import { useCart } from "@/context/CartContext";
+import { useAuth } from "@/hooks/useAuth";
 import { Input } from "../ui/input";
 import {
   DropdownMenu,
@@ -185,11 +185,13 @@ UserAvatar.displayName = 'UserAvatar';
 const UserDropdown = memo(({ 
   user, 
   language, 
-  onSignOut 
+  onSignOut,
+  onSignIn
 }: { 
   user: HeaderUser | null; 
   language: Language; 
   onSignOut: () => void; 
+  onSignIn: () => void;
 }) => {
   const { t } = useTranslation(language);
 
@@ -223,6 +225,7 @@ const UserDropdown = memo(({
                 type="button" 
                 className="w-full bg-[#febd69] hover:bg-[#f3a847] text-black font-bold py-2 px-4 rounded transition-colors"
                 aria-label={t('signIn')}
+                onClick={onSignIn}
               >
                 {t('signIn')}
               </button>
@@ -358,13 +361,15 @@ const MobileMenu = memo(({
   language, 
   isOpen, 
   onOpenChange, 
-  onSignOut 
+  onSignOut,
+  onSignIn
 }: {
   user: HeaderUser | null;
   language: Language;
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
   onSignOut: () => void;
+  onSignIn: () => void;
 }) => {
   const { t } = useTranslation(language);
 
@@ -416,6 +421,7 @@ const MobileMenu = memo(({
                 type="button" 
                 className="w-full bg-[#febd69] hover:bg-[#f3a847] text-black font-bold py-2 px-4 rounded transition-colors"
                 aria-label={t('signIn')}
+                onClick={() => { onOpenChange(false); onSignIn(); }}
               >
                 {t('signIn')}
               </button>
@@ -506,13 +512,15 @@ const SecondaryNav = memo(({
   isAllMenuOpen, 
   onAllMenuOpenChange,
   user,
-  onSignOut 
+  onSignOut,
+  onSignIn
 }: {
   language: Language;
   isAllMenuOpen: boolean;
   onAllMenuOpenChange: (open: boolean) => void;
   user: HeaderUser | null;
   onSignOut: () => void;
+  onSignIn: () => void;
 }) => {
   const { t } = useTranslation(language);
 
@@ -566,6 +574,7 @@ const SecondaryNav = memo(({
                     type="button" 
                     className="w-full bg-[#febd69] hover:bg-[#f3a847] text-black font-bold py-3 px-4 rounded transition-colors"
                     aria-label={t('signInToAccount')}
+                    onClick={() => { onAllMenuOpenChange(false); onSignIn(); }}
                   >
                     {t('signInToAccount')}
                   </button>
@@ -698,6 +707,7 @@ SecondaryNav.displayName = 'SecondaryNav';
 export default function Header() {
   const { cart } = useCart();
   const { user, signOut } = useAuth();
+  const navigate = useNavigate();
   const location = useLocation();
   const [language, setLanguage] = useState<Language>("en");
   const [searchQuery, setSearchQuery] = useState("");
@@ -714,7 +724,7 @@ export default function Header() {
   );
 
   const homeLink = useMemo(() => {
-    if (location.pathname.startsWith("/wholeseller")) return "/wholeseller";
+    if (location.pathname.startsWith("/wholesaler")) return "/wholesaler";
     if (location.pathname.startsWith("/admin")) return "/admin";
     return "/";
   }, [location.pathname]);
@@ -736,6 +746,10 @@ export default function Header() {
   const handleSearchCategoryChange = useCallback((e: ChangeEvent<HTMLSelectElement>) => {
     setSearchCategory(e.target.value);
   }, []);
+
+  const handleSignIn = useCallback(() => {
+    navigate('/login');
+  }, [navigate]);
 
   const handleSignOut = useCallback(async () => {
     try {
@@ -773,6 +787,7 @@ export default function Header() {
                 isOpen={isMobileMenuOpen}
                 onOpenChange={handleMobileMenuOpenChange}
                 onSignOut={handleSignOut}
+                onSignIn={handleSignIn}
               />
               <Logo homeLink={homeLink} />
             </div>
@@ -801,6 +816,7 @@ export default function Header() {
                   user={safeUser}
                   language={language}
                   onSignOut={handleSignOut}
+                  onSignIn={handleSignIn}
                 />
 
                 <CartLink
@@ -819,6 +835,7 @@ export default function Header() {
           onAllMenuOpenChange={handleAllMenuOpenChange}
           user={safeUser}
           onSignOut={handleSignOut}
+          onSignIn={handleSignIn}
         />
       </>
     </HeaderErrorBoundary>

@@ -1,142 +1,127 @@
 /* =========================
-   📦 API TYPES
+   📦 CORE API TYPES (Industry Standard)
    ========================= */
 
-// Base types
-export type UserRole = 'buyer' | 'wholeseller' | 'admin';
-export type OrderStatus = 'pending' | 'confirmed' | 'shipped' | 'delivered' | 'cancelled';
+export type UserRole = 'buyer' | 'wholesaler' | 'admin';
+export type OrderStatus = 'pending' | 'confirmed' | 'processing' | 'shipped' | 'delivered' | 'cancelled' | 'refunded';
 
-// User types
+export interface UserMetadata {
+  phone?: string;
+  business_name?: string;
+  tax_id?: string; // GST/VAT for clothing business
+}
+
 export interface User {
   id: string;
   email: string;
   full_name: string | null;
   role: UserRole;
+  metadata?: UserMetadata;
   created_at: string;
   updated_at: string;
 }
 
-export interface CreateUserData {
-  email: string;
-  full_name?: string;
-  role?: UserRole;
-}
-
-export interface UpdateUserData {
-  full_name?: string;
-  role?: UserRole;
-}
-
-// Product types
+// Clothing specific Product Schema
 export interface Product {
   id: string;
+  sku: string;
   name: string;
+  slug: string;
   description: string | null;
-  price: number;
+  base_price: number;
+  wholesale_price: number | null;
   category: string;
-  sizes: string[] | null; // JSONB array of sizes
-  images: string[] | null; // JSONB array of image URLs
-  stock_quantity: number;
+  sub_category?: string;
+  tags: string[];
+  attributes: {
+    material?: string;
+    fit?: string;
+    care_instructions?: string;
+    gender: 'Men' | 'Women' | 'Unisex' | 'Kids';
+  };
+  variants: ProductVariant[];
+  images: ProductImage[];
+  stock_status: 'in_stock' | 'low_stock' | 'out_of_stock';
   is_active: boolean;
   created_at: string;
-  updated_at: string;
 }
 
-export interface CreateProductData {
+export interface ProductVariant {
+  id: string;
+  size: string;
+  color: string;
+  color_hex?: string;
+  sku_extension: string;
+  additional_price: number;
+  stock_quantity: number;
+}
+
+export interface ProductImage {
+  url: string;
+  alt: string;
+  is_thumbnail: boolean;
+  order: number;
+}
+
+// Transactional Types
+export interface Order {
+  id: string;
+  order_number: string;
+  user_id: string;
+  total_amount: number;
+  currency: string;
+  status: OrderStatus;
+  payment_status: 'unpaid' | 'partial' | 'paid';
+  shipping_address: ShippingAddress;
+  items: OrderItem[];
+  created_at: string;
+}
+
+export interface OrderItem {
+  product_id: string;
+  variant_id: string;
   name: string;
-  description?: string;
-  price: number;
-  category: string;
-  sizes?: string[];
-  images?: string[];
-  stock_quantity?: number;
-  is_active?: boolean;
+  quantity: number;
+  unit_price: number;
+  total_price: number;
+  image_url?: string;
 }
 
-export interface UpdateProductData {
-  name?: string;
-  description?: string;
-  price?: number;
-  category?: string;
-  sizes?: string[];
-  images?: string[];
-  stock_quantity?: number;
-  is_active?: boolean;
-}
-
-// Order types
 export interface ShippingAddress {
+  first_name: string;
+  last_name: string;
   street: string;
   city: string;
   state: string;
   zip_code: string;
   country: string;
+  phone: string;
 }
 
-export interface Order {
-  id: string;
-  user_id: string;
-  total_amount: number;
-  status: OrderStatus;
-  shipping_address: ShippingAddress | null;
-  created_at: string;
-  updated_at: string;
-  order_items?: OrderItem[];
-  user?: User;
+// Response Wrappers
+export type ApiResponse<T> = {
+  success: boolean;
+  data: T | null;
+  error: ApiError | null;
+  timestamp: string;
+};
+
+export interface ApiError {
+  code: string;
+  message: string;
+  details?: Record<string, any>;
 }
 
-export interface OrderItem {
-  id: string;
-  order_id: string;
-  product_id: string;
-  quantity: number;
-  size: string | null;
-  price: number; // Price at time of order
-  created_at: string;
-  product?: Product;
+// Auth Types
+export interface AuthResponse {
+  user: User | null;
+  session: any | null; // Supabase session
+  error: {
+    message: string;
+    status: number;
+  } | null;
 }
 
-export interface CreateOrderData {
-  user_id: string;
-  total_amount: number;
-  shipping_address?: ShippingAddress;
-  order_items: CreateOrderItemData[];
-}
-
-export interface CreateOrderItemData {
-  product_id: string;
-  quantity: number;
-  size?: string;
-  price: number;
-}
-
-export interface UpdateOrderData {
-  status?: OrderStatus;
-  shipping_address?: ShippingAddress;
-}
-
-// Cart types
-export interface CartItem {
-  id: string;
-  user_id: string;
-  product_id: string;
-  quantity: number;
-  size: string | null;
-  added_at: string;
-  product?: Product;
-}
-
-export interface AddToCartData {
-  product_id: string;
-  quantity: number;
-  size?: string;
-}
-
-export interface UpdateCartItemData {
-  quantity: number;
-}
-
-// Authentication types
 export interface SignInData {
   email: string;
   password: string;
@@ -147,48 +132,4 @@ export interface SignUpData {
   password: string;
   full_name?: string;
   role?: UserRole;
-}
-
-export interface AuthResponse {
-  user: User | null;
-  session: unknown; // Supabase Session type
-  error: {
-    message: string;
-    status?: number;
-  } | null;
-}
-
-// API Response types
-export interface ApiResponse<T> {
-  data: T | null;
-  error: {
-    message: string;
-    status?: number;
-  } | null;
-}
-
-export interface PaginatedResponse<T> {
-  data: T[];
-  count: number;
-  error: {
-    message: string;
-    status?: number;
-  } | null;
-}
-
-// Query parameters
-export interface ProductFilters {
-  category?: string;
-  is_active?: boolean;
-  search?: string;
-}
-
-export interface OrderFilters {
-  status?: OrderStatus;
-  user_id?: string;
-}
-
-export interface PaginationParams {
-  page?: number;
-  limit?: number;
 }

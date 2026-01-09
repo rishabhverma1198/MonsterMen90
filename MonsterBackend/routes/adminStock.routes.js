@@ -1,12 +1,17 @@
 import express from 'express';
-import { supabase } from '../db/db.js';
+import { supabaseAdmin } from '../db/db.js';
+import { authenticateUser, requireAdmin } from '../middleware/auth.middleware.js';
+import { successResponse, errorResponse } from '../utils/response.util.js';
 
 const router = express.Router();
+
+// ✅ All admin routes require authentication and admin role
+router.use(authenticateUser, requireAdmin);
 
 // Get stock overview (admin)
 router.get('/overview', async (req, res) => {
   try {
-    const { data, error } = await supabase
+    const { data, error } = await supabaseAdmin
       .from('products')
       .select(`
         *,
@@ -15,7 +20,7 @@ router.get('/overview', async (req, res) => {
       .order('created_at', { ascending: false });
 
     if (error) {
-      return res.status(500).json({ error: error.message });
+      return errorResponse(res, error.message, 'Failed to fetch stock overview', 500);
     }
 
     // Calculate stock statistics
@@ -31,9 +36,10 @@ router.get('/overview', async (req, res) => {
       };
     }) || [];
 
-    res.json({ data: stats });
+    return successResponse(res, stats || [], 'Stock overview fetched successfully');
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error('Route error:', error);
+    return errorResponse(res, error.message, 'Operation failed', 500);
   }
 });
 
@@ -42,7 +48,7 @@ router.get('/movements', async (req, res) => {
   try {
     const { product_id, limit = 50 } = req.query;
     
-    let query = supabase
+    let query = supabaseAdmin
       .from('stock_movements')
       .select(`
         *,
@@ -58,12 +64,13 @@ router.get('/movements', async (req, res) => {
     const { data, error } = await query;
 
     if (error) {
-      return res.status(500).json({ error: error.message });
+      return errorResponse(res, error.message, 'Operation failed', 500);
     }
 
-    res.json({ data });
+    return successResponse(res, data || [], 'Operation successful');
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error('Route error:', error);
+    return errorResponse(res, error.message, 'Operation failed', 500);
   }
 });
 
@@ -72,7 +79,7 @@ router.post('/movements', async (req, res) => {
   try {
     const movement = req.body;
     
-    const { data, error } = await supabase
+    const { data, error } = await supabaseAdmin
       .from('stock_movements')
       .insert([{
         ...movement,
@@ -81,12 +88,12 @@ router.post('/movements', async (req, res) => {
       .select();
 
     if (error) {
-      return res.status(500).json({ error: error.message });
+      return errorResponse(res, error.message, 'Failed to create stock movement', 500);
     }
 
     // Update stock quantity
     if (movement.product_variant_id && movement.quantity_change) {
-      await supabase
+      await supabaseAdmin
         .from('product_variants')
         .update({
           stock_quantity: movement.new_quantity,
@@ -95,16 +102,17 @@ router.post('/movements', async (req, res) => {
         .eq('id', movement.product_variant_id);
     }
 
-    res.json({ data: data[0] });
+    return successResponse(res, data?.[0] || null, 'Stock movement created successfully');
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error('Route error:', error);
+    return errorResponse(res, error.message, 'Operation failed', 500);
   }
 });
 
 // Get stock alerts (admin)
 router.get('/alerts', async (req, res) => {
   try {
-    const { data, error } = await supabase
+    const { data, error } = await supabaseAdmin
       .from('product_variants')
       .select(`
         *,
@@ -115,12 +123,13 @@ router.get('/alerts', async (req, res) => {
       .order('stock_quantity', { ascending: true });
 
     if (error) {
-      return res.status(500).json({ error: error.message });
+      return errorResponse(res, error.message, 'Operation failed', 500);
     }
 
-    res.json({ data });
+    return successResponse(res, data || [], 'Operation successful');
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error('Route error:', error);
+    return errorResponse(res, error.message, 'Operation failed', 500);
   }
 });
 
@@ -130,7 +139,7 @@ router.patch('/threshold/:id', async (req, res) => {
     const { id } = req.params;
     const { min_stock_level } = req.body;
     
-    const { data, error } = await supabase
+    const { data, error } = await supabaseAdmin
       .from('product_variants')
       .update({ 
         min_stock_level,
@@ -140,12 +149,13 @@ router.patch('/threshold/:id', async (req, res) => {
       .select();
 
     if (error) {
-      return res.status(500).json({ error: error.message });
+      return errorResponse(res, error.message, 'Failed to update stock threshold', 500);
     }
 
-    res.json({ data: data[0] });
+    return successResponse(res, data?.[0] || null, 'Stock threshold updated successfully');
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error('Route error:', error);
+    return errorResponse(res, error.message, 'Operation failed', 500);
   }
 });
 

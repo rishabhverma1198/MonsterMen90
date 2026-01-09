@@ -1,623 +1,311 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { 
-  Tags, 
-  Edit, 
-  Trash2, 
-  Search, 
-  Folder, 
-  FolderOpen,
-  ChevronRight,
-  Package
+  Tags, Edit, Trash2, Search, Folder, FolderOpen, 
+  ChevronRight, Package, Plus, Loader2 
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { 
-  Dialog, 
-  DialogContent, 
-  DialogDescription, 
-  DialogHeader, 
-  DialogTitle 
-} from '@/components/ui/dialog';
-import { 
-  Table, 
-  TableBody, 
-  TableCell, 
-  TableHead, 
-  TableHeader, 
-  TableRow 
-} from '@/components/ui/table';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { supabase } from '@/lib/supabase';
 import { toast } from '@/hooks/use-toast';
 
+// --- Types ---
 interface Category {
   id: string;
   name: string;
   description?: string;
-  parent_id?: string;
+  parent_id?: string | null;
   status: 'active' | 'inactive';
   created_at: string;
-  updated_at: string;
-  products_count?: number;
-  parent_category?: {
-    name: string;
-  };
-  subcategories?: Category[];
+  products_count: number;
 }
 
 export default function AdminCategoryManagement() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
-  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingCategory, setEditingCategory] = useState<Category | null>(null);
-  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
+  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
+  const [submitting, setSubmitting] = useState(false);
+
   const [formData, setFormData] = useState({
     name: '',
     description: '',
-    parent_id: '',
+    parent_id: 'none',
     status: 'active' as 'active' | 'inactive'
   });
 
-  useEffect(() => {
-    fetchCategories();
-  }, []);
-
-  const fetchCategories = async () => {
+  // --- Data Fetching ---
+  const fetchCategories = useCallback(async () => {
     try {
+      setLoading(true);
       const { data, error } = await supabase
         .from('categories')
         .select(`
           *,
-          parent_category:categories!categories_parent_id_fkey(name),
           products:products(count)
         `)
         .order('name');
 
       if (error) throw error;
       
-      const categoriesWithCounts = data?.map(category => ({
-        ...category,
-        products_count: category.products?.[0]?.count || 0
+      const formatted = data?.map(cat => ({
+        ...cat,
+        products_count: cat.products?.[0]?.count || 0
       })) || [];
       
-      setCategories(categoriesWithCounts);
-    } catch (error) {
-      console.error('Error fetching categories:', error);
-      toast({
-        title: "Error",
-        description: "Failed to fetch categories",
-        variant: "destructive"
-      });
+      setCategories(formatted);
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  const handleAddCategory = async (e: React.FormEvent) => {
-    e.preventDefault();
-    try {
-      const { error } = await supabase
-        .from('categories')
-        .insert([
-          {
-            name: formData.name,
-            description: formData.description,
-            parent_id: formData.parent_id || null,
-            status: formData.status
-          }
-        ]);
+  useEffect(() => { fetchCategories(); }, [fetchCategories]);
 
-      if (error) throw error;
+  // --- Tree Logic ---
+  const rootCategories = useMemo(() => 
+    categories.filter(c => !c.parent_id && c.name.toLowerCase().includes(searchTerm.toLowerCase())),
+  [categories, searchTerm]);
 
-      toast({
-        title: "Success",
-        description: "Category added successfully"
-      });
+  const getSubcategories = (id: string) => categories.filter(c => c.parent_id === id);
 
-      setIsAddDialogOpen(false);
-      resetForm();
-      fetchCategories();
-    } catch (error) {
-      console.error('Error adding category:', error);
-      toast({
-        title: "Error",
-        description: "Failed to add category",
-        variant: "destructive"
-      });
-    }
-  };
-
-  const handleEditCategory = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!editingCategory) return;
-
-    try {
-      const { error } = await supabase
-        .from('categories')
-        .update({
-          name: formData.name,
-          description: formData.description,
-          parent_id: formData.parent_id || null,
-          status: formData.status,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', editingCategory.id);
-
-      if (error) throw error;
-
-      toast({
-        title: "Success",
-        description: "Category updated successfully"
-      });
-
-      setIsEditDialogOpen(false);
-      setEditingCategory(null);
-      resetForm();
-      fetchCategories();
-    } catch (error) {
-      console.error('Error updating category:', error);
-      toast({
-        title: "Error",
-        description: "Failed to update category",
-        variant: "destructive"
-      });
-    }
-  };
-
-  const handleDeleteCategory = async (categoryId: string) => {
-    if (!confirm('Are you sure you want to delete this category? This action cannot be undone.')) return;
-
-    try {
-      // Check if category has subcategories
-      const hasSubcategories = categories.some(cat => cat.parent_id === categoryId);
-      if (hasSubcategories) {
-        toast({
-          title: "Error",
-          description: "Cannot delete category with subcategories. Please delete subcategories first.",
-          variant: "destructive"
-        });
-        return;
-      }
-
-      // Check if category has products
-      const category = categories.find(cat => cat.id === categoryId);
-      if (category?.products_count && category.products_count > 0) {
-        toast({
-          title: "Error",
-          description: "Cannot delete category with products. Please move or delete products first.",
-          variant: "destructive"
-        });
-        return;
-      }
-
-      const { error } = await supabase
-        .from('categories')
-        .delete()
-        .eq('id', categoryId);
-
-      if (error) throw error;
-
-      toast({
-        title: "Success",
-        description: "Category deleted successfully"
-      });
-
-      fetchCategories();
-    } catch (error) {
-      console.error('Error deleting category:', error);
-      toast({
-        title: "Error",
-        description: "Failed to delete category",
-        variant: "destructive"
-      });
-    }
-  };
-
-  const openEditDialog = (category: Category) => {
-    setEditingCategory(category);
-    setFormData({
-      name: category.name,
-      description: category.description || '',
-      parent_id: category.parent_id || '',
-      status: category.status
-    });
-    setIsEditDialogOpen(true);
-  };
-
+  // --- Form Logic ---
   const resetForm = () => {
-    setFormData({
-      name: '',
-      description: '',
-      parent_id: '',
-      status: 'active'
-    });
+    setFormData({ name: '', description: '', parent_id: 'none', status: 'active' });
+    setEditingCategory(null);
   };
 
-  const toggleCategoryExpansion = (categoryId: string) => {
-    const newExpanded = new Set(expandedCategories);
-    if (newExpanded.has(categoryId)) {
-      newExpanded.delete(categoryId);
-    } else {
-      newExpanded.add(categoryId);
+  const handleSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSubmitting(true);
+
+    const payload = {
+      name: formData.name.trim(),
+      description: formData.description.trim(),
+      parent_id: formData.parent_id === 'none' ? null : formData.parent_id,
+      status: formData.status,
+    };
+
+    try {
+      if (editingCategory) {
+        // Prevent circular reference
+        if (payload.parent_id === editingCategory.id) throw new Error("Category khud ki parent nahi ho sakti.");
+
+        const { error } = await supabase.from('categories').update(payload).eq('id', editingCategory.id);
+        if (error) throw error;
+        toast({ title: "Updated", description: "Category update ho gayi hai." });
+      } else {
+        const { error } = await supabase.from('categories').insert([payload]);
+        if (error) throw error;
+        toast({ title: "Created", description: "Nayi category add ho gayi." });
+      }
+
+      setIsDialogOpen(false);
+      resetForm();
+      fetchCategories();
+    } catch (err: any) {
+      toast({ title: "Failed", description: err.message, variant: "destructive" });
+    } finally {
+      setSubmitting(false);
     }
-    setExpandedCategories(newExpanded);
   };
 
-  const getRootCategories = () => {
-    return categories.filter(category => !category.parent_id);
+  const handleDelete = async (cat: Category) => {
+    if (cat.products_count > 0) {
+      return toast({ title: "Cannot Delete", description: "Is category mein products hain.", variant: "destructive" });
+    }
+
+    if (!confirm(`Kya aap "${cat.name}" ko delete karna chahte hain?`)) return;
+
+    try {
+      const { error } = await supabase.from('categories').delete().eq('id', cat.id);
+      if (error) throw error;
+      setCategories(prev => prev.filter(c => c.id !== cat.id));
+      toast({ title: "Deleted", description: "Category delete ho gayi." });
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    }
   };
 
-  const getSubcategories = (parentId: string) => {
-    return categories.filter(category => category.parent_id === parentId);
+  const openEdit = (cat: Category) => {
+    setEditingCategory(cat);
+    setFormData({
+      name: cat.name,
+      description: cat.description || '',
+      parent_id: cat.parent_id || 'none',
+      status: cat.status
+    });
+    setIsDialogOpen(true);
   };
 
-  const filteredRootCategories = getRootCategories().filter(category => {
-    const matchesSearch = category.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         category.description?.toLowerCase().includes(searchTerm.toLowerCase());
-    return matchesSearch;
-  });
+  // --- Render Helpers ---
+  const toggleRow = (id: string) => {
+    const newExpanded = new Set(expandedRows);
+    if (newExpanded.has(id)) newExpanded.delete(id);
+    else newExpanded.add(id);
+    setExpandedRows(newExpanded);
+  };
 
-  const filteredSubcategories = categories.filter(category => category.parent_id);
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="text-center">
-          <Tags className="mx-auto h-12 w-12 text-gray-400" />
-          <h3 className="mt-2 text-sm font-medium text-gray-900">Loading categories...</h3>
-        </div>
-      </div>
-    );
-  }
+  if (loading) return <div className="flex h-64 items-center justify-center"><Loader2 className="animate-spin h-8 w-8 text-primary" /></div>;
 
   return (
-    <div className="space-y-6">
-      <div className="flex justify-between items-center">
+    <div className="space-y-6 animate-in fade-in duration-500">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
-          <h1 className="text-3xl font-bold">Category Management</h1>
-          <p className="text-gray-600">Organize your product catalog</p>
+          <h1 className="text-3xl font-bold tracking-tight">Category Center</h1>
+          <p className="text-muted-foreground">Catalog hierarchy aur grouping manage karein.</p>
         </div>
-        <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
-          <DialogContent>
+        
+        <Dialog open={isDialogOpen} onOpenChange={(open) => { if(!open) resetForm(); setIsDialogOpen(open); }}>
+          <DialogTrigger asChild>
+            <Button className="shadow-lg"><Plus className="mr-2 h-4 w-4" /> Add Category</Button>
+          </DialogTrigger>
+          <DialogContent className="sm:max-w-[425px]">
             <DialogHeader>
-              <DialogTitle>Add New Category</DialogTitle>
-              <DialogDescription>
-                Create a new product category
-              </DialogDescription>
+              <DialogTitle>{editingCategory ? 'Edit Category' : 'Create New Category'}</DialogTitle>
             </DialogHeader>
-            <form onSubmit={handleAddCategory} className="space-y-4">
+            <form onSubmit={handleSave} className="space-y-4 pt-4">
               <div className="space-y-2">
-                <Label htmlFor="name">Category Name</Label>
-                <Input
-                  id="name"
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  required
-                />
+                <Label>Category Name</Label>
+                <Input value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} required placeholder="e.g. Winter Wear" />
               </div>
-              
               <div className="space-y-2">
-                <Label htmlFor="description">Description</Label>
-                <Input
-                  id="description"
-                  value={formData.description}
-                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                />
-              </div>
-              
-              <div className="space-y-2">
-                <Label htmlFor="parent_category">Parent Category (Optional)</Label>
-                <Select value={formData.parent_id} onValueChange={(value) => setFormData({ ...formData, parent_id: value })}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select parent category" />
-                  </SelectTrigger>
+                <Label>Parent Category</Label>
+                <Select value={formData.parent_id} onValueChange={v => setFormData({...formData, parent_id: v})}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">No Parent</SelectItem>
-                    {getRootCategories().map((category) => (
-                      <SelectItem key={category.id} value={category.id}>
-                        {category.name}
-                      </SelectItem>
+                    <SelectItem value="none">None (Root)</SelectItem>
+                    {categories.filter(c => c.id !== editingCategory?.id && !c.parent_id).map(c => (
+                      <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
-              
               <div className="space-y-2">
-                <Label htmlFor="status">Status</Label>
-                <Select value={formData.status} onValueChange={(value: 'active' | 'inactive') => setFormData({ ...formData, status: value })}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
+                <Label>Status</Label>
+                <Select value={formData.status} onValueChange={(v: any) => setFormData({...formData, status: v})}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="active">Active</SelectItem>
                     <SelectItem value="inactive">Inactive</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
-              
-              <div className="flex justify-end space-x-2">
-                <Button type="button" variant="outline" onClick={() => setIsAddDialogOpen(false)}>
-                  Cancel
-                </Button>
-                <Button type="submit">Add Category</Button>
-              </div>
+              <Button type="submit" className="w-full" disabled={submitting}>
+                {submitting ? <Loader2 className="animate-spin mr-2 h-4 w-4" /> : <Save className="mr-2 h-4 w-4" />}
+                {editingCategory ? 'Update Category' : 'Save Category'}
+              </Button>
             </form>
           </DialogContent>
         </Dialog>
       </div>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Categories</CardTitle>
-            <Tags className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{categories.length}</div>
-          </CardContent>
-        </Card>
-        
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Root Categories</CardTitle>
-            <Folder className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{getRootCategories().length}</div>
-          </CardContent>
-        </Card>
-        
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Sub Categories</CardTitle>
-            <FolderOpen className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{filteredSubcategories.length}</div>
-          </CardContent>
-        </Card>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+         <StatsCard title="Total" value={categories.length} icon={<Tags size={16}/>} />
+         <StatsCard title="Live" value={categories.filter(c => c.status === 'active').length} icon={<CheckCircle size={16}/>} color="text-green-600" />
+         <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input className="pl-10 h-full" placeholder="Quick search categories..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
+         </div>
       </div>
 
-      {/* Search */}
-      <Card>
-        <CardContent className="pt-6">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-            <Input
-              placeholder="Search categories..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10"
-            />
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Categories Table */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Categories ({filteredRootCategories.length})</CardTitle>
-          <CardDescription>
-            Manage your product categories and hierarchy
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Category</TableHead>
-                <TableHead>Type</TableHead>
-                <TableHead>Products</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Created</TableHead>
-                <TableHead>Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredRootCategories.map((category) => {
-                const subcategories = getSubcategories(category.id);
-                const hasSubcategories = subcategories.length > 0;
-                const isExpanded = expandedCategories.has(category.id);
-                
-                return (
-                  <React.Fragment key={category.id}>
-                    <TableRow>
-                      <TableCell>
-                        <div className="flex items-center space-x-2">
-                          {hasSubcategories && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => toggleCategoryExpansion(category.id)}
-                            >
-                              <ChevronRight className={`h-4 w-4 ${isExpanded ? 'rotate-90' : ''}`} />
-                            </Button>
-                          )}
-                          <Folder className="h-4 w-4 text-blue-500" />
-                          <span className="font-medium">{category.name}</span>
-                        </div>
-                        {category.description && (
-                          <div className="text-sm text-gray-500 ml-6">{category.description}</div>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="outline">Root</Badge>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center space-x-1">
-                          <Package className="h-4 w-4 text-gray-400" />
-                          <span>{category.products_count || 0}</span>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant={category.status === 'active' ? 'default' : 'secondary'}>
-                          {category.status}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>{new Date(category.created_at).toLocaleDateString()}</TableCell>
-                      <TableCell>
-                        <div className="flex space-x-2">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => openEditDialog(category)}
-                          >
-                            <Edit className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleDeleteCategory(category.id)}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                    
-                    {hasSubcategories && isExpanded && subcategories.map((subcategory) => (
-                      <TableRow key={subcategory.id} className="bg-gray-50">
-                        <TableCell>
-                          <div className="flex items-center space-x-2 ml-8">
-                            <FolderOpen className="h-4 w-4 text-green-500" />
-                            <span>{subcategory.name}</span>
-                          </div>
-                          {subcategory.description && (
-                            <div className="text-sm text-gray-500 ml-12">{subcategory.description}</div>
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant="outline">Sub</Badge>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center space-x-1">
-                            <Package className="h-4 w-4 text-gray-400" />
-                            <span>{subcategory.products_count || 0}</span>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant={subcategory.status === 'active' ? 'default' : 'secondary'}>
-                            {subcategory.status}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>{new Date(subcategory.created_at).toLocaleDateString()}</TableCell>
-                        <TableCell>
-                          <div className="flex space-x-2">
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => openEditDialog(subcategory)}
-                            >
-                              <Edit className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => handleDeleteCategory(subcategory.id)}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </React.Fragment>
-                );
-              })}
-            </TableBody>
-          </Table>
-          
-          {filteredRootCategories.length === 0 && (
-            <div className="text-center py-12">
-              <Tags className="mx-auto h-12 w-12 text-gray-400" />
-              <h3 className="mt-2 text-sm font-medium text-gray-900">No categories found</h3>
-              <p className="mt-1 text-sm text-gray-500">
-                {searchTerm 
-                  ? 'Try adjusting your search criteria' 
-                  : 'Get started by adding your first category'
-                }
-              </p>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Edit Category Dialog */}
-      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Edit Category</DialogTitle>
-            <DialogDescription>
-              Update category information
-            </DialogDescription>
-          </DialogHeader>
-          <form onSubmit={handleEditCategory} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="edit_name">Category Name</Label>
-              <Input
-                id="edit_name"
-                value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                required
+      <Card className="border-none shadow-xl overflow-hidden">
+        <Table>
+          <TableHeader className="bg-muted/50">
+            <TableRow>
+              <TableHead className="w-[40%]">Category Name</TableHead>
+              <TableHead>Products</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead className="text-right">Actions</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {rootCategories.map(cat => (
+              <CategoryRow 
+                key={cat.id} 
+                cat={cat} 
+                level={0} 
+                expandedRows={expandedRows} 
+                toggleRow={toggleRow}
+                getSubcategories={getSubcategories}
+                onEdit={openEdit}
+                onDelete={handleDelete}
               />
-            </div>
-            
-            <div className="space-y-2">
-              <Label htmlFor="edit_description">Description</Label>
-              <Input
-                id="edit_description"
-                value={formData.description}
-                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-              />
-            </div>
-            
-            <div className="space-y-2">
-              <Label htmlFor="edit_parent_category">Parent Category (Optional)</Label>
-              <Select value={formData.parent_id} onValueChange={(value) => setFormData({ ...formData, parent_id: value })}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select parent category" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="">No Parent</SelectItem>
-                  {getRootCategories()
-                    .filter(cat => cat.id !== editingCategory?.id)
-                    .map((category) => (
-                      <SelectItem key={category.id} value={category.id}>
-                        {category.name}
-                      </SelectItem>
-                    ))}
-                </SelectContent>
-              </Select>
-            </div>
-            
-            <div className="space-y-2">
-              <Label htmlFor="edit_status">Status</Label>
-              <Select value={formData.status} onValueChange={(value: 'active' | 'inactive') => setFormData({ ...formData, status: value })}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="active">Active</SelectItem>
-                  <SelectItem value="inactive">Inactive</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            
-            <div className="flex justify-end space-x-2">
-              <Button type="button" variant="outline" onClick={() => setIsEditDialogOpen(false)}>
-                Cancel
-              </Button>
-              <Button type="submit">Update Category</Button>
-            </div>
-          </form>
-        </DialogContent>
-      </Dialog>
+            ))}
+          </TableBody>
+        </Table>
+      </Card>
     </div>
+  );
+}
+
+// --- Sub-Components ---
+
+function CategoryRow({ cat, level, expandedRows, toggleRow, getSubcategories, onEdit, onDelete }: any) {
+  const subs = getSubcategories(cat.id);
+  const isExpanded = expandedRows.has(cat.id);
+  
+  return (
+    <>
+      <TableRow className={level > 0 ? "bg-muted/20" : ""}>
+        <TableCell style={{ paddingLeft: `${level * 2 + 1}rem` }}>
+          <div className="flex items-center gap-2">
+            {subs.length > 0 ? (
+              <button onClick={() => toggleRow(cat.id)} className="hover:bg-muted p-1 rounded">
+                <ChevronRight size={14} className={`transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
+              </button>
+            ) : <div className="w-6" />}
+            {isExpanded ? <FolderOpen size={16} className="text-blue-500" /> : <Folder size={16} className="text-blue-400" />}
+            <span className="font-medium">{cat.name}</span>
+          </div>
+        </TableCell>
+        <TableCell>
+          <div className="flex items-center gap-1 text-muted-foreground">
+            <Package size={14} /> {cat.products_count}
+          </div>
+        </TableCell>
+        <TableCell>
+          <Badge variant={cat.status === 'active' ? 'default' : 'secondary'}>{cat.status}</Badge>
+        </TableCell>
+        <TableCell className="text-right">
+          <div className="flex justify-end gap-2">
+            <Button variant="ghost" size="sm" onClick={() => onEdit(cat)}><Edit size={14}/></Button>
+            <Button variant="ghost" size="sm" onClick={() => onDelete(cat)} className="text-red-500"><Trash2 size={14}/></Button>
+          </div>
+        </TableCell>
+      </TableRow>
+      {isExpanded && subs.map((s: any) => (
+        <CategoryRow 
+          key={s.id} 
+          cat={s} 
+          level={level + 1} 
+          expandedRows={expandedRows} 
+          toggleRow={toggleRow} 
+          getSubcategories={getSubcategories}
+          onEdit={onEdit}
+          onDelete={onDelete}
+        />
+      ))}
+    </>
+  );
+}
+
+function StatsCard({ title, value, icon, color }: any) {
+  return (
+    <Card className="p-4 flex items-center justify-between border-none shadow-sm bg-muted/30">
+      <div>
+        <p className="text-xs text-muted-foreground uppercase font-bold">{title}</p>
+        <h3 className={`text-xl font-bold ${color}`}>{value}</h3>
+      </div>
+      <div className="p-2 bg-background rounded-full">{icon}</div>
+    </Card>
   );
 }

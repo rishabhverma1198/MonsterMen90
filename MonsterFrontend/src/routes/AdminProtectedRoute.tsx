@@ -1,9 +1,10 @@
-import React, { memo, useCallback, useEffect, useMemo, useState } from 'react';
-import { Navigate, useLocation } from 'react-router-dom';
-import { useAdmin } from '@/hooks/useAdmin';
-import { Loader2, AlertTriangle, RefreshCw } from 'lucide-react';
+import React, { memo, useCallback, useEffect, useMemo, useState, useRef } from 'react';
+import { Navigate, useLocation, useNavigate } from 'react-router-dom';
+import { useAdmin } from '@/context/AdminContext';
+import { Loader2, AlertTriangle, RefreshCw, ShieldAlert, ArrowLeft } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 
-// Types and Interfaces
+// --- TYPES ---
 interface AdminProtectedRouteProps {
   children: React.ReactNode;
   fallbackPath?: string;
@@ -11,74 +12,33 @@ interface AdminProtectedRouteProps {
   enableRetry?: boolean;
 }
 
-// Constants
-const DEFAULT_TIMEOUT_MS = 10000; // 10 seconds
-const DEFAULT_REDIRECT_PATH = '/';
+// --- CONSTANTS ---
+const DEFAULT_TIMEOUT_MS = 6000; 
+const DEFAULT_REDIRECT_PATH = '/admin/login';
+
 const ERROR_MESSAGES = {
-  TIMEOUT: 'Request timed out. Please try again.',
-  ACCESS_DENIED: 'You do not have administrator privileges to access this area.',
-  NETWORK_ERROR: 'Unable to verify admin access. Please check your connection.',
-  UNKNOWN_ERROR: 'An unexpected error occurred while verifying your permissions.'
+  TIMEOUT: 'Security verification is taking longer than expected. Please check your connection.',
+  ACCESS_DENIED: 'Restricted Area: Administrative privileges are required to access this resource.',
+  SESSION_EXPIRED: 'Your administrative session has expired. Please log in again.',
+  UNKNOWN_ERROR: 'A critical error occurred during permission synchronization.'
 } as const;
 
-// Custom Hook for Admin State Management
-const useAdminWithErrorHandling = (timeoutMs: number) => {
-  const [error, setError] = useState<string>();
-  const [timeoutReached, setTimeoutReached] = useState(false);
-  
-  const adminHook = useAdmin();
-  const { loading } = adminHook;
+// --- INTERNAL UI COMPONENTS ---
 
-  // Handle timeout
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      if (loading) {
-        setTimeoutReached(true);
-        setError(ERROR_MESSAGES.TIMEOUT);
-      }
-    }, timeoutMs);
-
-    return () => clearTimeout(timer);
-  }, [loading, timeoutMs]);
-
-  // Reset error states when loading starts
-  useEffect(() => {
-    if (loading) {
-      setError(undefined);
-      setTimeoutReached(false);
-    }
-  }, [loading]);
-
-  const errorMessage = error || (timeoutReached ? ERROR_MESSAGES.TIMEOUT : undefined);
-
-  return {
-    ...adminHook,
-    error: errorMessage,
-    timeoutReached
-  };
-};
-
-// UI Components (separated for better maintainability)
 const LoadingState = memo(() => (
-  <div className="flex items-center justify-center min-h-screen bg-gray-50">
-    <div className="text-center max-w-md mx-auto p-6 bg-white rounded-xl shadow-lg">
-      <Loader2 className="w-12 h-12 text-orange-500 animate-spin mx-auto mb-4" />
-      <h3 className="text-lg font-semibold text-gray-800 mb-2">
-        Verifying Admin Access
-      </h3>
-      <p className="text-gray-600 mb-4">
-        Please wait while we check your permissions...
+  <div className="flex flex-col items-center justify-center min-h-[80vh] bg-white/50 backdrop-blur-md">
+    <div className="relative flex items-center justify-center">
+      <Loader2 className="w-14 h-14 text-orange-600 animate-spin" />
+      <ShieldAlert className="w-6 h-6 text-orange-400 absolute" />
+    </div>
+    <div className="mt-6 text-center animate-in fade-in slide-in-from-bottom-4 duration-700">
+      <h3 className="text-xl font-bold text-slate-900">Authenticating Secure Access</h3>
+      <p className="text-slate-500 mt-2 max-w-xs mx-auto text-sm">
+        Verifying your administrator credentials with our security gateway...
       </p>
-      <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-        <p className="text-sm text-blue-700">
-          This usually takes a few seconds. If it takes longer, there might be a connection issue.
-        </p>
-      </div>
     </div>
   </div>
 ));
-
-LoadingState.displayName = 'LoadingState';
 
 const AccessDeniedState = memo<{
   errorMessage: string;
@@ -86,48 +46,36 @@ const AccessDeniedState = memo<{
   onRetry?: () => void;
   showRetry: boolean;
 }>(({ errorMessage, onReturnHome, onRetry, showRetry }) => (
-  <div className="flex items-center justify-center min-h-screen bg-gray-50">
-    <div className="text-center max-w-md mx-auto p-6 bg-white rounded-xl shadow-lg">
-      <AlertTriangle className="w-16 h-16 text-red-500 mx-auto mb-4" />
-      <h3 className="text-lg font-semibold text-gray-800 mb-2">
-        Access Denied
-      </h3>
-      <p className="text-gray-600 mb-4">
-        {errorMessage}
-      </p>
-      <div className="bg-red-50 border border-red-200 rounded-lg p-3 mb-4">
-        <p className="text-sm text-red-700">
-          Admin access required. Please contact your system administrator.
-        </p>
+  <div className="flex items-center justify-center min-h-screen bg-slate-50 p-6">
+    <div className="w-full max-w-md bg-white rounded-3xl shadow-2xl shadow-slate-200/60 overflow-hidden border border-slate-100">
+      <div className="bg-red-600 p-8 flex justify-center">
+        <div className="bg-white/20 p-4 rounded-full backdrop-blur-sm">
+          <ShieldAlert className="w-12 h-12 text-white" />
+        </div>
       </div>
-      
-      <div className="flex flex-col sm:flex-row gap-3 justify-center">
-        {showRetry && onRetry && (
-          <button
-            type="button"
-            onClick={onRetry}
-            className="flex items-center justify-center gap-2 bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 transition-colors"
-            aria-label="Retry admin verification"
-          >
-            <RefreshCw className="w-4 h-4" />
-            Retry
-          </button>
-        )}
-        <button
-          type="button"
-          onClick={onReturnHome}
-          className="bg-orange-500 text-white px-4 py-2 rounded-lg hover:bg-orange-600 transition-colors"
-        >
-          Return to Home
-        </button>
+      <div className="p-8 text-center">
+        <h3 className="text-2xl font-bold text-slate-900 mb-3">Security Alert</h3>
+        <p className="text-slate-600 mb-6 text-sm leading-relaxed">
+          {errorMessage}
+        </p>
+        
+        <div className="grid grid-cols-1 gap-3">
+          {showRetry && onRetry && (
+            <Button onClick={onRetry} variant="default" className="w-full bg-slate-900 hover:bg-slate-800 py-6 text-base rounded-xl">
+              <RefreshCw className="mr-2 h-5 w-5" /> Re-Verify Identity
+            </Button>
+          )}
+          <Button onClick={onReturnHome} variant="outline" className="w-full py-6 text-base border-slate-200 rounded-xl">
+            <ArrowLeft className="mr-2 h-5 w-5" /> Exit to Safety
+          </Button>
+        </div>
       </div>
     </div>
   </div>
 ));
 
-AccessDeniedState.displayName = 'AccessDeniedState';
+// --- MAIN PROTECTION COMPONENT ---
 
-// Main Component
 export default function AdminProtectedRoute({
   children,
   fallbackPath = DEFAULT_REDIRECT_PATH,
@@ -135,64 +83,70 @@ export default function AdminProtectedRoute({
   enableRetry = true
 }: AdminProtectedRouteProps) {
   const location = useLocation();
+  const navigate = useNavigate();
+  const [internalError, setInternalError] = useState<string>();
+  const [isTimedOut, setIsTimedOut] = useState(false);
   
-  // Enhanced admin hook with error handling
-  const {
-    isAdmin,
-    loading,
-    error: adminError,
-    timeoutReached
-  } = useAdminWithErrorHandling(timeoutMs);
+  const { isAdmin, loading } = useAdmin();
+  const hasLoggedError = useRef(false);
 
-  // Memoize expensive values
-  const errorMessage = useMemo(() => {
-    if (adminError) return adminError;
-    return undefined;
-  }, [adminError]);
+  // 1. Unified Security Check & Logging
+  useEffect(() => {
+    let timer: NodeJS.Timeout;
 
-  const showRetry = useMemo(() => {
-    return enableRetry && Boolean(adminError || timeoutReached);
-  }, [enableRetry, adminError, timeoutReached]);
+    if (loading) {
+      timer = setTimeout(() => {
+        setIsTimedOut(true);
+        setInternalError(ERROR_MESSAGES.TIMEOUT);
+        console.error("[Security] Admin verification timed out at", location.pathname);
+      }, timeoutMs);
+    }
 
-  // Memoized navigation handlers
+    return () => clearTimeout(timer);
+  }, [loading, timeoutMs, location.pathname]);
+
+  // 2. Audit Log for Access Denied (Industry Standard)
+  useEffect(() => {
+    if (!loading && !isAdmin && !hasLoggedError.current) {
+      console.warn(`[Security Alert] Unauthorized admin access attempt to ${location.pathname} by IP/User Session.`);
+      hasLoggedError.current = true;
+    }
+  }, [loading, isAdmin, location.pathname]);
+
+  // 3. Handlers
   const handleReturnHome = useCallback(() => {
-    // Store the attempted location for potential future use
-    sessionStorage.setItem('admin_access_attempt', location.pathname);
-  }, [location.pathname]);
+    sessionStorage.setItem('last_denied_admin_route', location.pathname);
+    navigate('/');
+  }, [location.pathname, navigate]);
 
   const handleRetry = useCallback(() => {
-    // Force re-check by triggering a page reload or re-render
+    hasLoggedError.current = false;
     window.location.reload();
   }, []);
 
-  // Memoize children to prevent unnecessary re-renders
-  const memoizedChildren = useMemo(() => children, [children]);
+  // --- RENDERING LOGIC ---
 
-  // Show loading state
-  if (loading) {
-    return <LoadingState />;
-  }
+  if (loading) return <LoadingState />;
 
-  // Show error state or access denied
-  if (!isAdmin || adminError || timeoutReached) {
-    // Use fallback path if provided, otherwise show error state
-    if (fallbackPath) {
-      return <Navigate to={fallbackPath} replace />;
+  // Validation Logic
+  const accessError = internalError;
+  const isAuthorized = isAdmin && !accessError;
+
+  if (!isAuthorized) {
+    // If we have a fallback path and the user isn't an admin, redirect
+    if (fallbackPath && !isAdmin) {
+      return <Navigate to={fallbackPath} state={{ from: location, reason: 'unauthorized' }} replace />; //
     }
     
     return (
       <AccessDeniedState
-        errorMessage={errorMessage || ERROR_MESSAGES.UNKNOWN_ERROR}
+        errorMessage={accessError || ERROR_MESSAGES.ACCESS_DENIED}
         onReturnHome={handleReturnHome}
-        onRetry={showRetry ? handleRetry : undefined}
-        showRetry={showRetry}
+        onRetry={enableRetry ? handleRetry : undefined}
+        showRetry={enableRetry}
       />
     );
   }
 
-  // If admin, render children
-  return <>{memoizedChildren}</>;
+  return <>{children}</>;
 }
-
-// Export types for external use
-export type { AdminProtectedRouteProps };

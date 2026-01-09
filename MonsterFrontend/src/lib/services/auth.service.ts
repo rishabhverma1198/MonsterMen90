@@ -7,9 +7,10 @@ import type {
   ApiResponse
 } from '../../types/api-types';
 
+
 /**
- * Authentication Service
- * Handles user authentication operations
+ * Enhanced Authentication Service
+ * Handles user authentication operations with Supabase
  */
 export class AuthService {
 

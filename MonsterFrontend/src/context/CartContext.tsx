@@ -1,8 +1,9 @@
 import {
   useState,
+  useContext,
 } from "react";
 import type { ReactNode } from "react";
-import type { CartItem } from "../types/cart-types";
+import type { CartItem, SizeBreakup } from "../types/cart-types";
 import { CartContext } from "./CartContextBase";
 
 /* =========================
@@ -17,7 +18,6 @@ export function CartProvider({
 
   /* ➕ ADD / UPDATE */
   const upsertItem = (item: CartItem) => {
-    console.log("CartContext: Upserting item:", item.name);
     setCart(prev => {
       const totalQty = Object.values(item.sizeBreakup)
         .reduce((s, v) => s + v.qty, 0);
@@ -58,3 +58,17 @@ export function CartProvider({
     </CartContext.Provider>
   );
 }
+
+/* =========================
+   🪝 HOOK
+========================= */
+export function useCart() {
+  const context = useContext(CartContext);
+  if (!context) {
+    throw new Error("useCart must be used within a CartProvider");
+  }
+  return context;
+}
+
+// Re-export types for convenience
+export type { SizeBreakup };

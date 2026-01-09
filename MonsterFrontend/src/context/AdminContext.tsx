@@ -1,183 +1,162 @@
-import { useEffect, useState } from 'react';
-import { supabase } from '@/lib/supabase';
-import type { User } from '@/types/api-types';
+import { useContext, useEffect, useState, useCallback, useRef } from 'react';
 import type { ReactNode } from 'react';
+import type { AdminContextType } from './AdminContextValue';
 import { AdminContext } from './AdminContextValue';
+import type { User } from '@/types/api-types';
+import { supabase } from '@/lib/supabase';
 
-// Timeout for admin status check (3 seconds)
-const ADMIN_CHECK_TIMEOUT = 3000;
+interface AdminContextProviderProps {
+  children: ReactNode;
+}
 
-// Fallback admin check with timeout
-const checkAdminStatusWithTimeout = async (
-  setAdmin: (admin: (User & { admin_role?: string }) | null) => void,
-  setLoading: (loading: boolean) => void
-): Promise<void> => {
-  try {
-    // Create a timeout promise
-    const timeoutPromise = new Promise<void>((_, reject) => {
-      setTimeout(() => reject(new Error('Admin check timeout')), ADMIN_CHECK_TIMEOUT);
-    });
-
-    // Create the admin check promise
-    const checkPromise = async () => {
-      try {
-        // First check if there's an active session
-        const {
-          data: { session },
-          error: sessionError
-        } = await supabase.auth.getSession();
-
-        if (sessionError) {
-          console.warn('Session error:', sessionError);
-          setAdmin(null);
-          setLoading(false);
-          return;
-        }
-
-        if (!session) {
-          // No active session, user is not authenticated
-          setAdmin(null);
-          setLoading(false);
-          return;
-        }
-
-        const { user: authUser } = session;
-        
-        if (!authUser) {
-          setAdmin(null);
-          setLoading(false);
-          return;
-        }
-
-        // Try to get user profile with error handling and shorter timeout
-        try {
-          const profilePromise = supabase
-            .from('users')
-            .select('*')
-            .eq('id', authUser.id)
-            .single();
-
-          // Race between profile check and a shorter timeout
-          const timeoutPromise = new Promise((_, reject) => {
-            setTimeout(() => reject(new Error('Profile check timeout')), 1000);
-          });
-
-          const { data: profile, error } = await Promise.race([
-            profilePromise,
-            timeoutPromise
-          ]) as any;
-
-          if (error || !profile) {
-            // If users table doesn't exist or other DB error, assume not admin
-            console.warn('User profile fetch error:', error);
-            setAdmin(null);
-            setLoading(false);
-            return;
-          }
-
-          // Check if user is admin
-          if (profile.user_type === 'admin') {
-            setAdmin(profile);
-          } else {
-            setAdmin(null);
-          }
-        } catch (profileError) {
-          // If profile check fails, assume not admin
-          console.warn('Profile check failed:', profileError);
-          setAdmin(null);
-        }
-      } catch (error) {
-        console.error('Admin status check failed:', error);
-        setAdmin(null);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    // Race between check and timeout
-    await Promise.race([checkPromise(), timeoutPromise]);
-    
-  } catch (error) {
-    if (error instanceof Error && error.message === 'Admin check timeout') {
-      console.warn('Admin check timed out after', ADMIN_CHECK_TIMEOUT, 'ms');
-    } else {
-      console.error('Admin check error:', error);
-    }
-    setAdmin(null);
-    setLoading(false);
-  }
-};
-
-export function AdminProvider({ children }: { children: ReactNode }) {
-  const [admin, setAdmin] = useState<(User & { admin_role?: string }) | null>(null);
+export function AdminProvider({ children }: AdminContextProviderProps) {
+  const [admin, setAdmin] = useState<(User & { user_type?: string }) | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const isMountedRef = useRef(true);
 
-  useEffect(() => {
-    checkAdminStatusWithTimeout(setAdmin, setLoading);
+  const isAdmin = admin !== null && admin.user_type === 'admin';
 
-    // Subscribe to auth changes
-    const {
-      data: { subscription }
-    } = supabase.auth.onAuthStateChange(async (event: string, session: any) => {
-      if (event === 'SIGNED_OUT' || !session) {
-        setAdmin(null);
-        setLoading(false);
-      } else if (session && event === 'SIGNED_IN') {
-        await checkAdminStatusWithTimeout(setAdmin, setLoading);
-      }
-    });
-
-    return () => subscription?.unsubscribe();
-  }, []);
-
-  const checkAdminAccess = async (): Promise<boolean> => {
+  const checkAdminAccess = useCallback(async (): Promise<boolean> => {
     try {
-      // First check if there's an active session
-      const {
-        data: { session },
-        error: sessionError
-      } = await supabase.auth.getSession();
+      if (isMountedRef.current) setLoading(true);
+      
+      // Get current Supabase session
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
 
-      if (sessionError || !session) {
+      if (sessionError || !session?.user) {
+        // No session is normal for login page - don't log as error
+        if (isMountedRef.current) {
+          setAdmin(null);
+          setLoading(false);
+        }
         return false;
       }
 
-      const { user } = session;
-      if (!user) return false;
-
-      const { data: profile } = await supabase
+      // Query user profile from users table
+      const { data: profile, error: profileError } = await supabase
         .from('users')
-        .select('user_type')
-        .eq('id', user.id)
+        .select('id, email, full_name, user_type, is_active, created_at, updated_at')
+        .eq('id', session.user.id)
         .single();
 
-      return profile?.user_type === 'admin';
+      if (profileError || !profile) {
+        // Only log error if it's not a "not found" error (normal for non-admin users)
+        if (profileError?.code !== 'PGRST116') {
+          console.error('[AdminContext] Profile error:', profileError);
+        }
+        if (isMountedRef.current) {
+          setAdmin(null);
+          setLoading(false);
+        }
+        return false;
+      }
+      
+      // Check if user is admin and active
+      if (profile.user_type === 'admin' && profile.is_active !== false) {
+        const adminUser: User & { user_type: string } = {
+          id: profile.id,
+          email: profile.email,
+          full_name: profile.full_name || '',
+          role: 'admin' as any, // For backward compatibility
+          user_type: profile.user_type,
+          created_at: profile.created_at,
+          updated_at: profile.updated_at,
+        };
+        if (isMountedRef.current) {
+          setAdmin(adminUser);
+          setLoading(false);
+        }
+        return true;
+      } else {
+        if (isMountedRef.current) {
+          setAdmin(null);
+          setLoading(false);
+        }
+        return false;
+      }
     } catch (error) {
-      console.error('Check admin access error:', error);
+      console.error('[AdminContext] Admin access check failed:', error);
+      if (isMountedRef.current) {
+        setAdmin(null);
+        setLoading(false);
+      }
       return false;
     }
-  };
+  }, []);
 
-  const logout = async () => {
+  useEffect(() => {
+    // mark mounted
+    isMountedRef.current = true;
+
+    checkAdminAccess();
+
+    // Listen for auth state changes
+    const onAuth = supabase.auth.onAuthStateChange(async (event: string, _session: any) => {
+      if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+        await checkAdminAccess();
+      } else if (event === 'SIGNED_OUT') {
+        if (isMountedRef.current) {
+          setAdmin(null);
+          setLoading(false);
+        }
+      }
+    });
+
+    const subscription = onAuth?.data?.subscription ?? onAuth?.subscription;
+
+    return () => {
+      // mark unmounted and cleanup subscription safely
+      isMountedRef.current = false;
+      try {
+        if (subscription && typeof subscription.unsubscribe === 'function') {
+          subscription.unsubscribe();
+        }
+      } catch (e) {
+        // swallow cleanup errors
+      }
+    };
+  }, [checkAdminAccess]);
+
+  const logout = useCallback(async (): Promise<void> => {
     try {
+      // Sign out from Supabase
       await supabase.auth.signOut();
+      
+      // Clear admin state
       setAdmin(null);
+      setLoading(false);
     } catch (error) {
-      console.error('Logout error:', error);
+      console.error('[AdminContext] Logout failed:', error);
+      // Still clear state even if signOut fails
+      setAdmin(null);
+      setLoading(false);
     }
+  }, []);
+
+  const contextValue: AdminContextType = {
+    admin,
+    loading,
+    isAdmin,
+    error,
+    logout,
+    checkAdminAccess,
   };
 
   return (
-    <AdminContext.Provider
-      value={{
-        admin,
-        loading,
-        isAdmin: !!admin,
-        logout,
-        checkAdminAccess
-      }}
-    >
+    <AdminContext.Provider value={contextValue}>
       {children}
     </AdminContext.Provider>
   );
 }
+
+export function useAdmin(): AdminContextType {
+  const context = useContext(AdminContext);
+  if (context === undefined) {
+    throw new Error('useAdmin must be used within an AdminProvider');
+  }
+  return context;
+}
+
+// Legacy export for backward compatibility
+export default AdminContext;

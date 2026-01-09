@@ -1,0 +1,420 @@
+{
+  "timestamp": "2026-01-01T03:19:56.637Z",
+  "summary": {
+    "total": 44,
+    "passed": 0,
+    "failed": 44,
+    "warnings": 0,
+    "success_rate": "0.00%"
+  },
+  "categories": {
+    "authentication": {
+      "passed": 0,
+      "failed": 4,
+      "warnings": 0
+    },
+    "products": {
+      "passed": 0,
+      "failed": 10,
+      "warnings": 0
+    },
+    "orders": {
+      "passed": 0,
+      "failed": 6,
+      "warnings": 0
+    },
+    "inventory": {
+      "passed": 0,
+      "failed": 5,
+      "warnings": 0
+    },
+    "users": {
+      "passed": 0,
+      "failed": 3,
+      "warnings": 0
+    },
+    "security": {
+      "passed": 0,
+      "failed": 4,
+      "warnings": 0
+    },
+    "performance": {
+      "passed": 0,
+      "failed": 3,
+      "warnings": 0
+    },
+    "integration": {
+      "passed": 0,
+      "failed": 9,
+      "warnings": 0
+    }
+  },
+  "details": [
+    {
+      "category": "integration",
+      "test": "Server Connectivity Check",
+      "status": "failed",
+      "message": "Error",
+      "timestamp": "2026-01-01T03:19:56.694Z",
+      "error": "Error"
+    },
+    {
+      "category": "authentication",
+      "test": "Public Products Endpoint",
+      "status": "failed",
+      "message": "Error",
+      "timestamp": "2026-01-01T03:19:56.701Z",
+      "error": "Error"
+    },
+    {
+      "category": "authentication",
+      "test": "Public Categories Endpoint",
+      "status": "failed",
+      "message": "Error",
+      "timestamp": "2026-01-01T03:19:56.707Z",
+      "error": "Error"
+    },
+    {
+      "category": "authentication",
+      "test": "Featured Products Endpoint",
+      "status": "failed",
+      "message": "Error",
+      "timestamp": "2026-01-01T03:19:56.711Z",
+      "error": "Error"
+    },
+    {
+      "category": "authentication",
+      "test": "Product Search Endpoint",
+      "status": "failed",
+      "message": "Error",
+      "timestamp": "2026-01-01T03:19:56.714Z",
+      "error": "Error"
+    },
+    {
+      "category": "products",
+      "test": "Get All Products (Admin)",
+      "status": "failed",
+      "message": "Error",
+      "timestamp": "2026-01-01T03:19:56.717Z",
+      "error": "Error"
+    },
+    {
+      "category": "products",
+      "test": "Get Single Product (Admin)",
+      "status": "failed",
+      "message": "Error",
+      "timestamp": "2026-01-01T03:19:56.719Z",
+      "error": "Error"
+    },
+    {
+      "category": "products",
+      "test": "Create Product (Admin)",
+      "status": "failed",
+      "message": "Error",
+      "timestamp": "2026-01-01T03:19:56.723Z",
+      "error": "Error"
+    },
+    {
+      "category": "products",
+      "test": "Update Product (Admin)",
+      "status": "failed",
+      "message": "No test product ID available",
+      "timestamp": "2026-01-01T03:19:56.723Z",
+      "error": "No test product ID available"
+    },
+    {
+      "category": "products",
+      "test": "Delete Product (Admin)",
+      "status": "failed",
+      "message": "No test product ID available",
+      "timestamp": "2026-01-01T03:19:56.723Z",
+      "error": "No test product ID available"
+    },
+    {
+      "category": "products",
+      "test": "Product Filtering and Pagination",
+      "status": "failed",
+      "message": "Error",
+      "timestamp": "2026-01-01T03:19:56.728Z",
+      "error": "Error"
+    },
+    {
+      "category": "products",
+      "test": "Admin Product Management - Get All",
+      "status": "failed",
+      "message": "Error",
+      "timestamp": "2026-01-01T03:19:56.730Z",
+      "error": "Error"
+    },
+    {
+      "category": "products",
+      "test": "Admin Product Management - Get Categories",
+      "status": "failed",
+      "message": "Error",
+      "timestamp": "2026-01-01T03:19:56.732Z",
+      "error": "Error"
+    },
+    {
+      "category": "products",
+      "test": "Admin Product Management - Create Category",
+      "status": "failed",
+      "message": "Error",
+      "timestamp": "2026-01-01T03:19:56.735Z",
+      "error": "Error"
+    },
+    {
+      "category": "products",
+      "test": "Admin Product Management - Low Stock",
+      "status": "failed",
+      "message": "Error",
+      "timestamp": "2026-01-01T03:19:56.738Z",
+      "error": "Error"
+    },
+    {
+      "category": "orders",
+      "test": "Get All Orders (Admin)",
+      "status": "failed",
+      "message": "Error",
+      "timestamp": "2026-01-01T03:19:56.741Z",
+      "error": "Error"
+    },
+    {
+      "category": "orders",
+      "test": "Create Order (Admin)",
+      "status": "failed",
+      "message": "Error",
+      "timestamp": "2026-01-01T03:19:56.744Z",
+      "error": "Error"
+    },
+    {
+      "category": "orders",
+      "test": "Get Single Order (Admin)",
+      "status": "failed",
+      "message": "No test order ID available",
+      "timestamp": "2026-01-01T03:19:56.744Z",
+      "error": "No test order ID available"
+    },
+    {
+      "category": "orders",
+      "test": "Update Order Status (Admin)",
+      "status": "failed",
+      "message": "No test order ID available",
+      "timestamp": "2026-01-01T03:19:56.744Z",
+      "error": "No test order ID available"
+    },
+    {
+      "category": "orders",
+      "test": "Discount Management (Admin)",
+      "status": "failed",
+      "message": "Error",
+      "timestamp": "2026-01-01T03:19:56.746Z",
+      "error": "Error"
+    },
+    {
+      "category": "orders",
+      "test": "Price Rules Management (Admin)",
+      "status": "failed",
+      "message": "Error",
+      "timestamp": "2026-01-01T03:19:56.748Z",
+      "error": "Error"
+    },
+    {
+      "category": "inventory",
+      "test": "Get Inventory Overview (Admin)",
+      "status": "failed",
+      "message": "Error",
+      "timestamp": "2026-01-01T03:19:56.750Z",
+      "error": "Error"
+    },
+    {
+      "category": "inventory",
+      "test": "Get Stock Movements (Admin)",
+      "status": "failed",
+      "message": "Error",
+      "timestamp": "2026-01-01T03:19:56.753Z",
+      "error": "Error"
+    },
+    {
+      "category": "inventory",
+      "test": "Get Stock Alerts (Admin)",
+      "status": "failed",
+      "message": "Error",
+      "timestamp": "2026-01-01T03:19:56.755Z",
+      "error": "Error"
+    },
+    {
+      "category": "inventory",
+      "test": "Get All Inventory Items (Admin)",
+      "status": "failed",
+      "message": "Error",
+      "timestamp": "2026-01-01T03:19:56.758Z",
+      "error": "Error"
+    },
+    {
+      "category": "inventory",
+      "test": "Get Low Stock Items (Admin)",
+      "status": "failed",
+      "message": "Error",
+      "timestamp": "2026-01-01T03:19:56.760Z",
+      "error": "Error"
+    },
+    {
+      "category": "users",
+      "test": "Get All Users (Admin)",
+      "status": "failed",
+      "message": "Error",
+      "timestamp": "2026-01-01T03:19:56.762Z",
+      "error": "Error"
+    },
+    {
+      "category": "users",
+      "test": "Get Single User (Admin)",
+      "status": "failed",
+      "message": "Error",
+      "timestamp": "2026-01-01T03:19:56.763Z",
+      "error": "Error"
+    },
+    {
+      "category": "users",
+      "test": "Category Management (Admin)",
+      "status": "failed",
+      "message": "Error",
+      "timestamp": "2026-01-01T03:19:56.765Z",
+      "error": "Error"
+    },
+    {
+      "category": "security",
+      "test": "Invalid Product ID Handling",
+      "status": "failed",
+      "message": "Expected 500 error for invalid product ID",
+      "timestamp": "2026-01-01T03:19:56.767Z",
+      "error": "Expected 500 error for invalid product ID"
+    },
+    {
+      "category": "security",
+      "test": "Malformed Request Data",
+      "status": "failed",
+      "message": "Expected validation error for malformed data",
+      "timestamp": "2026-01-01T03:19:56.769Z",
+      "error": "Expected validation error for malformed data"
+    },
+    {
+      "category": "security",
+      "test": "SQL Injection Prevention",
+      "status": "failed",
+      "message": "Error",
+      "timestamp": "2026-01-01T03:19:56.771Z",
+      "error": "Error"
+    },
+    {
+      "category": "security",
+      "test": "Request Timeout Handling",
+      "status": "failed",
+      "message": "Request should have taken at least 1000ms",
+      "timestamp": "2026-01-01T03:19:56.773Z",
+      "error": "Request should have taken at least 1000ms"
+    },
+    {
+      "category": "performance",
+      "test": "Product Listing Performance",
+      "status": "failed",
+      "message": "Error",
+      "timestamp": "2026-01-01T03:19:56.776Z",
+      "error": "Error"
+    },
+    {
+      "category": "performance",
+      "test": "Concurrent Request Handling",
+      "status": "failed",
+      "message": "Error",
+      "timestamp": "2026-01-01T03:19:56.785Z",
+      "error": "Error"
+    },
+    {
+      "category": "performance",
+      "test": "Large Dataset Pagination",
+      "status": "failed",
+      "message": "Error",
+      "timestamp": "2026-01-01T03:19:56.790Z",
+      "error": "Error"
+    },
+    {
+      "category": "integration",
+      "test": "Product Data Structure Validation",
+      "status": "failed",
+      "message": "Error",
+      "timestamp": "2026-01-01T03:19:56.794Z",
+      "error": "Error"
+    },
+    {
+      "category": "integration",
+      "test": "Category Hierarchy Validation",
+      "status": "failed",
+      "message": "Error",
+      "timestamp": "2026-01-01T03:19:56.796Z",
+      "error": "Error"
+    },
+    {
+      "category": "integration",
+      "test": "Stock Movement Data Integrity",
+      "status": "failed",
+      "message": "Error",
+      "timestamp": "2026-01-01T03:19:56.798Z",
+      "error": "Error"
+    },
+    {
+      "category": "integration",
+      "test": "Complete Product Lifecycle",
+      "status": "failed",
+      "message": "Error",
+      "timestamp": "2026-01-01T03:19:56.800Z",
+      "error": "Error"
+    },
+    {
+      "category": "integration",
+      "test": "Order Processing Workflow",
+      "status": "failed",
+      "message": "Error",
+      "timestamp": "2026-01-01T03:19:56.802Z",
+      "error": "Error"
+    },
+    {
+      "category": "integration",
+      "test": "Empty Search Results",
+      "status": "failed",
+      "message": "Error",
+      "timestamp": "2026-01-01T03:19:56.804Z",
+      "error": "Error"
+    },
+    {
+      "category": "integration",
+      "test": "Extreme Pagination Values",
+      "status": "failed",
+      "message": "Error",
+      "timestamp": "2026-01-01T03:19:56.806Z",
+      "error": "Error"
+    },
+    {
+      "category": "integration",
+      "test": "Special Characters in Search",
+      "status": "failed",
+      "message": "Error",
+      "timestamp": "2026-01-01T03:19:56.808Z",
+      "error": "Error"
+    }
+  ],
+  "recommendations": [
+    "Implement proper authentication middleware for admin endpoints",
+    "Add rate limiting to prevent API abuse",
+    "Validate and sanitize all input data",
+    "Optimize database queries and add proper indexing",
+    "Implement response caching for frequently accessed data",
+    "Consider pagination for large datasets",
+    "Improve error handling and response consistency",
+    "Add proper validation for request data",
+    "Implement better logging for debugging",
+    "Ensure proper access control for sensitive endpoints",
+    "Implement JWT token validation",
+    "Add CORS configuration for frontend integration"
+  ]
+}

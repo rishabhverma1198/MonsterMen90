@@ -1,71 +1,74 @@
-// Type definitions for wholesale functionality
 import type { WebsiteProduct } from '../lib/services/website-product.service';
 
 export type GenderFilter = 'all' | 'men' | 'women' | 'unisex';
-export type SortOption = 'newest' | 'price-low' | 'price-high' | 'name';
+export type SortOption = 'newest' | 'price-low' | 'price-high' | 'name' | 'savings';
 
-export interface ProductFilters {
+export interface WholesaleFilters {
   searchTerm: string;
   selectedGender: GenderFilter;
   sortBy: SortOption;
   category?: string;
   priceRange?: [number, number];
-  inStock?: boolean;
+  inStockOnly: boolean;
+  minSavingsPercentage?: number;
 }
 
 export interface WholesaleProduct extends WebsiteProduct {
-  wholesalePrice: number;
-  savingsPerUnit: number;
+  readonly wholesalePrice: number;
+  readonly savingsPerUnit: number;
+  readonly savingsPercentage: number;
+  readonly moq: number; // Minimum Order Quantity for wholesalers
+  readonly bulkTierPrices?: Array<{ minQty: number; price: number }>;
 }
 
 export interface UseProductDataReturn {
-  products: WebsiteProduct[];
-  loading: boolean;
-  error: string | null;
+  products: WholesaleProduct[];
+  isLoading: boolean;
+  error: Error | null;
   refetch: () => Promise<void>;
   totalCount: number;
-  hasMore?: boolean;
-  loadMore?: () => void;
+  pagination: {
+    currentPage: number;
+    hasMore: boolean;
+    loadMore: () => void;
+  };
 }
 
 export interface UseProductFiltersReturn {
-  filters: ProductFilters;
-  setSearchTerm: (term: string) => void;
-  setSelectedGender: (gender: GenderFilter) => void;
-  setSortBy: (sort: SortOption) => void;
-  clearFilters: () => void;
+  filters: WholesaleFilters;
+  updateFilter: <K extends keyof WholesaleFilters>(key: K, value: WholesaleFilters[K]) => void;
+  resetFilters: () => void;
 }
 
 export interface FilterPerformanceMetrics {
-  filterTime: number;
-  productCount: number;
+  executionTimeMs: number;
+  resultsCount: number;
 }
 
 export interface UseFilteredProductsReturn {
-  filteredProducts: WebsiteProduct[];
-  performanceMetrics: FilterPerformanceMetrics;
+  filteredProducts: WholesaleProduct[];
+  metrics: FilterPerformanceMetrics;
 }
 
 export interface ProductGridProps {
-  products: WebsiteProduct[];
+  products: WholesaleProduct[];
   loading: boolean;
-  onProductAction: (product: WebsiteProduct, action: 'view' | 'add-to-cart') => void;
+  onAction: (product: WholesaleProduct, type: 'view' | 'add-to-cart' | 'negotiate') => void;
   viewMode?: 'grid' | 'list';
   className?: string;
 }
 
 export interface FilterSectionProps {
-  filters: ProductFilters;
-  onFilterChange: Omit<UseProductFiltersReturn, 'filters'>;
-  productCount: number;
+  filters: WholesaleFilters;
+  handlers: Omit<UseProductFiltersReturn, 'filters'>;
+  totalFound: number;
   isVisible?: boolean;
   onClose?: () => void;
-  className?: string;
 }
 
 export interface WholesaleProductCardProps {
-  product: WebsiteProduct;
-  onView: (product: WebsiteProduct) => void;
-  onAddToCart: (product: WebsiteProduct) => void;
-  className?: string;
+  product: WholesaleProduct;
+  onView: (id: string) => void;
+  onAddToCart: (id: string, qty: number) => void;
+  isCompact?: boolean;
 }

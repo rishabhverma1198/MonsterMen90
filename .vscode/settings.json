@@ -1,3 +1,10 @@
 {
-    "chat.extensionUnification.enabled": true
+    "chat.extensionUnification.enabled": true,
+    "github.copilot.chat.agent.autoFix": true,
+    "github.copilot.chat.alternateGeminiModelFPrompt.enabled": true,
+    "github.copilot.chat.alternateGptPrompt.enabled": true,
+    "github.copilot.chat.anthropic.tools.websearch.enabled": true,
+    "coderabbit.agentType": "Kilo Code",
+    "coderabbit.autoReviewMode": "auto",
+    "chat.agent.maxRequests": 50
 }

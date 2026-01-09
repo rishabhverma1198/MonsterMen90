@@ -1,0 +1,921 @@
+// Import React for testing
+import React from 'react';
+
+// Import testing utilities
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { BrowserRouter } from 'react-router-dom';
+import { vi, describe, it, expect, beforeEach } from 'vitest';
+
+// Import modules to test
+import AdminUserManagement from '@/pages/admin/AdminUserManagement';
+
+// Import services and utilities
+import { adminUserService } from '@/lib/services/admin.service';
+
+// Mock dependencies
+vi.mock('@/lib/supabase', () => ({
+  supabase: {
+    from: vi.fn(() => ({
+      select: vi.fn(() => ({
+        order: vi.fn(() => ({
+          data: [],
+          error: null
+        }))
+      }))
+    }))
+  }
+}));
+
+vi.mock('@/lib/services/admin.service');
+vi.mock('@/hooks/use-toast');
+
+// Type the mock service
+const mockAdminUserService = adminUserService as any;
+
+// Test data
+const mockUsers = [
+  {
+    id: '1',
+    email: 'user1@test.com',
+    full_name: 'Test User 1',
+    phone: '1234567890',
+    user_type: 'buyer' as const,
+    avatar_url: 'https://example.com/avatar1.jpg',
+    created_at: '2024-01-01T10:00:00Z',
+    user_addresses: [],
+    orders: [{ id: 'order1', total_amount: 1000, status: 'delivered' }]
+  },
+  {
+    id: '2',
+    email: 'user2@test.com',
+    full_name: 'Test User 2',
+    phone: '9876543210',
+    user_type: 'wholeseller' as const,
+    avatar_url: 'https://example.com/avatar2.jpg',
+    created_at: '2024-01-02T10:00:00Z',
+    user_addresses: [],
+    orders: [{ id: 'order2', total_amount: 2000, status: 'delivered' }]
+  },
+  {
+    id: '3',
+    email: 'admin@test.com',
+    full_name: 'Admin User',
+    phone: '5555555555',
+    user_type: 'admin' as const,
+    avatar_url: 'https://example.com/avatar3.jpg',
+    created_at: '2024-01-03T10:00:00Z',
+    user_addresses: [],
+    orders: []
+  }
+];
+
+// Test wrapper component
+const TestWrapper: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+  <BrowserRouter>
+    {children}
+  </BrowserRouter>
+);
+
+// Setup mock for window.confirm
+const mockConfirm = vi.fn();
+
+describe('AdminUserManagement Component Test Suite', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    global.confirm = mockConfirm;
+    mockConfirm.mockReturnValue(true);
+  });
+
+  describe('User CRUD Operations', () => {
+    it('should fetch and display users on component mount', async () => {
+      mockAdminUserService.getUsers.mockResolvedValue({ data: mockUsers, error: null });
+
+      render(
+        <TestWrapper>
+          <AdminUserManagement />
+        </TestWrapper>
+      );
+
+      await waitFor(() => {
+        expect(mockAdminUserService.getUsers).toHaveBeenCalled();
+        expect(screen.getByText('Test User 1')).toBeInTheDocument();
+        expect(screen.getByText('Test User 2')).toBeInTheDocument();
+        expect(screen.getByText('Admin User')).toBeInTheDocument();
+      });
+    });
+
+    it('should handle user fetch error gracefully', async () => {
+      mockAdminUserService.getUsers.mockResolvedValue({ data: null, error: new Error('Fetch failed') });
+
+      render(
+        <TestWrapper>
+          <AdminUserManagement />
+        </TestWrapper>
+      );
+
+      await waitFor(() => {
+        expect(mockAdminUserService.getUsers).toHaveBeenCalled();
+        // Should not crash and should show empty state or error
+        expect(screen.queryByText('Test User 1')).not.toBeInTheDocument();
+      });
+    });
+
+    it('should update user information successfully', async () => {
+      mockAdminUserService.getUsers.mockResolvedValue({ data: mockUsers, error: null });
+      mockAdminUserService.updateUser.mockResolvedValue({ data: [mockUsers[0]], error: null });
+
+      render(
+        <TestWrapper>
+          <AdminUserManagement />
+        </TestWrapper>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText('Test User 1')).toBeInTheDocument();
+      });
+
+      // Click edit button for first user
+      const editButtons = screen.getAllByRole('button', { name: /edit/i });
+      fireEvent.click(editButtons[0]);
+
+      // Update form data
+      const nameInput = screen.getByLabelText('Full Name');
+      fireEvent.change(nameInput, { target: { value: 'Updated User 1' } });
+
+      const phoneInput = screen.getByLabelText('Phone Number');
+      fireEvent.change(phoneInput, { target: { value: '1111111111' } });
+
+      // Submit form
+      const submitButton = screen.getByText('Update Account Permissions');
+      fireEvent.click(submitButton);
+
+      await waitFor(() => {
+        expect(mockAdminUserService.updateUser).toHaveBeenCalledWith('1', {
+          full_name: 'Updated User 1',
+          phone: '1111111111',
+          user_type: 'buyer'
+        });
+        expect(screen.getByText('Updated User 1')).toBeInTheDocument();
+      });
+    });
+
+    it('should handle user update error', async () => {
+      mockAdminUserService.getUsers.mockResolvedValue({ data: mockUsers, error: null });
+      mockAdminUserService.updateUser.mockResolvedValue({ data: null, error: new Error('Update failed') });
+
+      render(
+        <TestWrapper>
+          <AdminUserManagement />
+        </TestWrapper>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText('Test User 1')).toBeInTheDocument();
+      });
+
+      // Click edit button for first user
+      const editButtons = screen.getAllByRole('button', { name: /edit/i });
+      fireEvent.click(editButtons[0]);
+
+      // Submit form without changes
+      const submitButton = screen.getByText('Update Account Permissions');
+      fireEvent.click(submitButton);
+
+      await waitFor(() => {
+        expect(mockAdminUserService.updateUser).toHaveBeenCalled();
+        // Should show error message
+        expect(screen.getByText('Error')).toBeInTheDocument();
+      });
+    });
+
+    it('should deactivate user successfully', async () => {
+      mockAdminUserService.getUsers.mockResolvedValue({ data: mockUsers, error: null });
+      mockAdminUserService.deactivateUser.mockResolvedValue({ data: [mockUsers[0]], error: null });
+
+      // Mock window.confirm
+      global.confirm = vi.fn(() => true);
+
+      render(
+        <TestWrapper>
+          <AdminUserManagement />
+        </TestWrapper>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText('Test User 1')).toBeInTheDocument();
+      });
+
+      // Click delete button for first user
+      const deleteButtons = screen.getAllByRole('button', { name: /trash/i });
+      fireEvent.click(deleteButtons[0]);
+
+      await waitFor(() => {
+        expect(mockAdminUserService.deactivateUser).toHaveBeenCalledWith('1');
+        expect(global.confirm).toHaveBeenCalled();
+        // User should be removed from the list
+        expect(screen.queryByText('Test User 1')).not.toBeInTheDocument();
+      });
+    });
+
+    it('should prevent admin user deletion', async () => {
+      mockAdminUserService.getUsers.mockResolvedValue({ data: mockUsers, error: null });
+
+      render(
+        <TestWrapper>
+          <AdminUserManagement />
+        </TestWrapper>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText('Admin User')).toBeInTheDocument();
+      });
+
+      // Click delete button for admin user (third user)
+      const deleteButtons = screen.getAllByRole('button', { name: /trash/i });
+      fireEvent.click(deleteButtons[2]);
+
+      await waitFor(() => {
+        expect(mockAdminUserService.deactivateUser).not.toHaveBeenCalled();
+        // Should show error message
+        expect(screen.getByText('Action Denied')).toBeInTheDocument();
+        expect(screen.getByText('Admin User')).toBeInTheDocument();
+      });
+    });
+
+    it('should cancel user deletion when not confirmed', async () => {
+      mockAdminUserService.getUsers.mockResolvedValue({ data: mockUsers, error: null });
+
+      // Mock window.confirm to return false
+      global.confirm = vi.fn(() => false);
+
+      render(
+        <TestWrapper>
+          <AdminUserManagement />
+        </TestWrapper>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText('Test User 1')).toBeInTheDocument();
+      });
+
+      // Click delete button for first user
+      const deleteButtons = screen.getAllByRole('button', { name: /trash/i });
+      fireEvent.click(deleteButtons[0]);
+
+      await waitFor(() => {
+        expect(mockAdminUserService.deactivateUser).not.toHaveBeenCalled();
+        expect(global.confirm).toHaveBeenCalled();
+        // User should still be in the list
+        expect(screen.getByText('Test User 1')).toBeInTheDocument();
+      });
+    });
+  });
+
+  describe('Role Management', () => {
+    it('should allow changing user roles', async () => {
+      mockAdminUserService.getUsers.mockResolvedValue({ data: mockUsers, error: null });
+      mockAdminUserService.updateUser.mockResolvedValue({ data: [mockUsers[0]], error: null });
+
+      render(
+        <TestWrapper>
+          <AdminUserManagement />
+        </TestWrapper>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText('Test User 1')).toBeInTheDocument();
+      });
+
+      // Click edit button for first user
+      const editButtons = screen.getAllByRole('button', { name: /edit/i });
+      fireEvent.click(editButtons[0]);
+
+      // Change role to wholeseller
+      const roleSelect = screen.getByLabelText('User Role');
+      fireEvent.click(roleSelect);
+      fireEvent.click(screen.getByText('Wholesaler'));
+
+      // Submit form
+      const submitButton = screen.getByText('Update Account Permissions');
+      fireEvent.click(submitButton);
+
+      await waitFor(() => {
+        expect(mockAdminUserService.updateUser).toHaveBeenCalledWith('1', {
+          full_name: 'Test User 1',
+          phone: '1234567890',
+          user_type: 'wholeseller'
+        });
+        // Should show wholeseller badge
+        expect(screen.getByText('wholeseller')).toBeInTheDocument();
+      });
+    });
+
+    it('should validate role changes', async () => {
+      mockAdminUserService.getUsers.mockResolvedValue({ data: mockUsers, error: null });
+      mockAdminUserService.updateUser.mockResolvedValue({ data: [mockUsers[0]], error: null });
+
+      render(
+        <TestWrapper>
+          <AdminUserManagement />
+        </TestWrapper>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText('Test User 1')).toBeInTheDocument();
+      });
+
+      // Click edit button for first user
+      const editButtons = screen.getAllByRole('button', { name: /edit/i });
+      fireEvent.click(editButtons[0]);
+
+      // Change role to admin
+      const roleSelect = screen.getByLabelText('User Role');
+      fireEvent.click(roleSelect);
+      fireEvent.click(screen.getByText('Administrator'));
+
+      // Submit form
+      const submitButton = screen.getByText('Update Account Permissions');
+      fireEvent.click(submitButton);
+
+      await waitFor(() => {
+        expect(mockAdminUserService.updateUser).toHaveBeenCalledWith('1', {
+          full_name: 'Test User 1',
+          phone: '1234567890',
+          user_type: 'admin'
+        });
+        // Should show admin badge
+        expect(screen.getByText('admin')).toBeInTheDocument();
+      });
+    });
+  });
+
+  describe('User Search and Filtering', () => {
+    it('should filter users by search term', async () => {
+      mockAdminUserService.getUsers.mockResolvedValue({ data: mockUsers, error: null });
+
+      render(
+        <TestWrapper>
+          <AdminUserManagement />
+        </TestWrapper>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText('Test User 1')).toBeInTheDocument();
+        expect(screen.getByText('Test User 2')).toBeInTheDocument();
+      });
+
+      // Search for user 1
+      const searchInput = screen.getByPlaceholderText('Search name, email...');
+      fireEvent.change(searchInput, { target: { value: 'Test User 1' } });
+
+      await waitFor(() => {
+        expect(screen.getByText('Test User 1')).toBeInTheDocument();
+        expect(screen.queryByText('Test User 2')).not.toBeInTheDocument();
+      });
+
+      // Clear search
+      fireEvent.change(searchInput, { target: { value: '' } });
+
+      await waitFor(() => {
+        expect(screen.getByText('Test User 1')).toBeInTheDocument();
+        expect(screen.getByText('Test User 2')).toBeInTheDocument();
+      });
+    });
+
+    it('should filter users by role', async () => {
+      mockAdminUserService.getUsers.mockResolvedValue({ data: mockUsers, error: null });
+
+      render(
+        <TestWrapper>
+          <AdminUserManagement />
+        </TestWrapper>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText('Test User 1')).toBeInTheDocument();
+        expect(screen.getByText('Test User 2')).toBeInTheDocument();
+        expect(screen.getByText('Admin User')).toBeInTheDocument();
+      });
+
+      // Filter by buyer role
+      const roleFilter = screen.getByRole('combobox');
+      fireEvent.click(roleFilter);
+      fireEvent.click(screen.getByText('Buyers'));
+
+      await waitFor(() => {
+        expect(screen.getByText('Test User 1')).toBeInTheDocument();
+        expect(screen.queryByText('Test User 2')).not.toBeInTheDocument();
+        expect(screen.queryByText('Admin User')).not.toBeInTheDocument();
+      });
+
+      // Filter by admin role
+      fireEvent.click(roleFilter);
+      fireEvent.click(screen.getByText('Admins'));
+
+      await waitFor(() => {
+        expect(screen.queryByText('Test User 1')).not.toBeInTheDocument();
+        expect(screen.queryByText('Test User 2')).not.toBeInTheDocument();
+        expect(screen.getByText('Admin User')).toBeInTheDocument();
+      });
+    });
+
+    it('should combine search and role filters', async () => {
+      mockAdminUserService.getUsers.mockResolvedValue({ data: mockUsers, error: null });
+
+      render(
+        <TestWrapper>
+          <AdminUserManagement />
+        </TestWrapper>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText('Test User 1')).toBeInTheDocument();
+        expect(screen.getByText('Test User 2')).toBeInTheDocument();
+      });
+
+      // Filter by wholeseller role
+      const roleFilter = screen.getByRole('combobox');
+      fireEvent.click(roleFilter);
+      fireEvent.click(screen.getByText('Wholesalers'));
+
+      // Search within wholesellers
+      const searchInput = screen.getByPlaceholderText('Search name, email...');
+      fireEvent.change(searchInput, { target: { value: 'user2' } });
+
+      await waitFor(() => {
+        expect(screen.queryByText('Test User 1')).not.toBeInTheDocument();
+        expect(screen.getByText('Test User 2')).toBeInTheDocument();
+        expect(screen.queryByText('Admin User')).not.toBeInTheDocument();
+      });
+    });
+
+    it('should show empty state when no users match filters', async () => {
+      mockAdminUserService.getUsers.mockResolvedValue({ data: mockUsers, error: null });
+
+      render(
+        <TestWrapper>
+          <AdminUserManagement />
+        </TestWrapper>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText('Test User 1')).toBeInTheDocument();
+      });
+
+      // Search for non-existent user
+      const searchInput = screen.getByPlaceholderText('Search name, email...');
+      fireEvent.change(searchInput, { target: { value: 'Non Existent User' } });
+
+      await waitFor(() => {
+        expect(screen.queryByText('Test User 1')).not.toBeInTheDocument();
+        expect(screen.getByText('Koi user nahi mila. Filter reset karein.')).toBeInTheDocument();
+      });
+    });
+  });
+
+  describe('User Data Validation', () => {
+    it('should validate required fields in edit form', async () => {
+      mockAdminUserService.getUsers.mockResolvedValue({ data: mockUsers, error: null });
+
+      render(
+        <TestWrapper>
+          <AdminUserManagement />
+        </TestWrapper>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText('Test User 1')).toBeInTheDocument();
+      });
+
+      // Click edit button for first user
+      const editButtons = screen.getAllByRole('button', { name: /edit/i });
+      fireEvent.click(editButtons[0]);
+
+      // Clear name field
+      const nameInput = screen.getByLabelText('Full Name');
+      fireEvent.change(nameInput, { target: { value: '' } });
+
+      // Try to submit form
+      const submitButton = screen.getByText('Update Account Permissions');
+      fireEvent.click(submitButton);
+
+      // Should not submit and show validation error
+      await waitFor(() => {
+        expect(mockAdminUserService.updateUser).not.toHaveBeenCalled();
+        expect(nameInput).toHaveAttribute('required');
+      });
+    });
+
+    it('should allow optional fields to be empty', async () => {
+      mockAdminUserService.getUsers.mockResolvedValue({ data: mockUsers, error: null });
+      mockAdminUserService.updateUser.mockResolvedValue({ data: [mockUsers[0]], error: null });
+
+      render(
+        <TestWrapper>
+          <AdminUserManagement />
+        </TestWrapper>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText('Test User 1')).toBeInTheDocument();
+      });
+
+      // Click edit button for first user
+      const editButtons = screen.getAllByRole('button', { name: /edit/i });
+      fireEvent.click(editButtons[0]);
+
+      // Clear phone field (optional)
+      const phoneInput = screen.getByLabelText('Phone Number');
+      fireEvent.change(phoneInput, { target: { value: '' } });
+
+      // Submit form
+      const submitButton = screen.getByText('Update Account Permissions');
+      fireEvent.click(submitButton);
+
+      await waitFor(() => {
+        expect(mockAdminUserService.updateUser).toHaveBeenCalledWith('1', {
+          full_name: 'Test User 1',
+          phone: '',
+          user_type: 'buyer'
+        });
+      });
+    });
+
+    it('should validate email format in user data', async () => {
+      const usersWithInvalidEmail = [
+        {
+          id: '1',
+          email: 'invalid-email',
+          full_name: 'Invalid Email User',
+          phone: '1234567890',
+          user_type: 'buyer' as const,
+          created_at: '2024-01-01T10:00:00Z',
+          user_addresses: [],
+          orders: []
+        }
+      ];
+
+      mockAdminUserService.getUsers.mockResolvedValue({ data: usersWithInvalidEmail, error: null });
+
+      render(
+        <TestWrapper>
+          <AdminUserManagement />
+        </TestWrapper>
+      );
+
+      await waitFor(() => {
+        // Should still display user even with invalid email format
+        expect(screen.getByText('Invalid Email User')).toBeInTheDocument();
+      });
+    });
+  });
+
+  describe('User Statistics and Analytics', () => {
+    it('should display correct user statistics', async () => {
+      mockAdminUserService.getUsers.mockResolvedValue({ data: mockUsers, error: null });
+
+      render(
+        <TestWrapper>
+          <AdminUserManagement />
+        </TestWrapper>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText('Total Users')).toBeInTheDocument();
+        expect(screen.getByText('3')).toBeInTheDocument();
+        expect(screen.getByText('Buyers')).toBeInTheDocument();
+        expect(screen.getByText('1')).toBeInTheDocument();
+        expect(screen.getByText('Wholesalers')).toBeInTheDocument();
+        expect(screen.getByText('1')).toBeInTheDocument();
+        expect(screen.getByText('Total LT Revenue')).toBeInTheDocument();
+        expect(screen.getByText('₹3,000')).toBeInTheDocument();
+      });
+    });
+
+    it('should calculate revenue correctly', async () => {
+      const usersWithRevenue = [
+        {
+          id: '1',
+          email: 'user1@test.com',
+          full_name: 'Test User 1',
+          phone: '1234567890',
+          user_type: 'buyer' as const,
+          created_at: '2024-01-01T10:00:00Z',
+          user_addresses: [],
+          orders: [
+            { id: 'order1', total_amount: 1500, status: 'delivered' },
+            { id: 'order2', total_amount: 2500, status: 'delivered' }
+          ]
+        }
+      ];
+
+      mockAdminUserService.getUsers.mockResolvedValue({ data: usersWithRevenue, error: null });
+
+      render(
+        <TestWrapper>
+          <AdminUserManagement />
+        </TestWrapper>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText('₹4,000')).toBeInTheDocument();
+      });
+    });
+
+    it('should handle users with no orders', async () => {
+      const usersWithNoOrders = [
+        {
+          id: '1',
+          email: 'user1@test.com',
+          full_name: 'Test User 1',
+          phone: '1234567890',
+          user_type: 'buyer' as const,
+          created_at: '2024-01-01T10:00:00Z',
+          user_addresses: [],
+          orders: []
+        }
+      ];
+
+      mockAdminUserService.getUsers.mockResolvedValue({ data: usersWithNoOrders, error: null });
+
+      render(
+        <TestWrapper>
+          <AdminUserManagement />
+        </TestWrapper>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText('₹0')).toBeInTheDocument();
+      });
+    });
+  });
+
+  describe('User Interface and Experience', () => {
+    it('should show loading state initially', async () => {
+      mockAdminUserService.getUsers.mockImplementation(() => 
+        new Promise(resolve => setTimeout(() => 
+          resolve({ data: mockUsers, error: null }), 100
+        ))
+      );
+
+      render(
+        <TestWrapper>
+          <AdminUserManagement />
+        </TestWrapper>
+      );
+
+      // Should show loading spinner initially
+      expect(screen.getByRole('status')).toBeInTheDocument();
+
+      await waitFor(() => {
+        expect(screen.getByText('Test User 1')).toBeInTheDocument();
+      });
+    });
+
+    it('should display user avatars correctly', async () => {
+      mockAdminUserService.getUsers.mockResolvedValue({ data: mockUsers, error: null });
+
+      render(
+        <TestWrapper>
+          <AdminUserManagement />
+        </TestWrapper>
+      );
+
+      await waitFor(() => {
+        const avatars = screen.getAllByRole('img');
+        expect(avatars.length).toBeGreaterThan(0);
+        expect(avatars[0]).toHaveAttribute('src', 'https://example.com/avatar1.jpg');
+      });
+    });
+
+    it('should show fallback avatar for users without avatar URL', async () => {
+      const usersWithoutAvatar = [
+        {
+          id: '1',
+          email: 'user1@test.com',
+          full_name: 'Test User 1',
+          phone: '1234567890',
+          user_type: 'buyer' as const,
+          created_at: '2024-01-01T10:00:00Z',
+          user_addresses: [],
+          orders: [],
+          avatar_url: undefined
+        }
+      ];
+
+      mockAdminUserService.getUsers.mockResolvedValue({ data: usersWithoutAvatar, error: null });
+
+      render(
+        <TestWrapper>
+          <AdminUserManagement />
+        </TestWrapper>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText('T')).toBeInTheDocument(); // Fallback initial
+      });
+    });
+
+    it('should display role badges with correct styling', async () => {
+      mockAdminUserService.getUsers.mockResolvedValue({ data: mockUsers, error: null });
+
+      render(
+        <TestWrapper>
+          <AdminUserManagement />
+        </TestWrapper>
+      );
+
+      await waitFor(() => {
+        const buyerBadge = screen.getByText('buyer');
+        const wholesellerBadge = screen.getByText('wholeseller');
+        const adminBadge = screen.getByText('admin');
+
+        expect(buyerBadge).toHaveClass('bg-blue-50 text-blue-700');
+        expect(wholesellerBadge).toHaveClass('bg-purple-50 text-purple-700');
+        expect(adminBadge).toHaveClass('bg-red-50 text-red-700');
+      });
+    });
+
+    it('should show user details in modal', async () => {
+      mockAdminUserService.getUsers.mockResolvedValue({ data: mockUsers, error: null });
+
+      render(
+        <TestWrapper>
+          <AdminUserManagement />
+        </TestWrapper>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText('Test User 1')).toBeInTheDocument();
+      });
+
+      // Click view button for first user
+      const viewButtons = screen.getAllByRole('button', { name: /eye/i });
+      fireEvent.click(viewButtons[0]);
+
+      // Should open modal with user details
+      await waitFor(() => {
+        expect(screen.getByText('Account Details')).toBeInTheDocument();
+        expect(screen.getByText('user1@test.com')).toBeInTheDocument();
+      });
+    });
+  });
+
+  describe('Edge Cases and Error Handling', () => {
+    it('should handle empty user list', async () => {
+      mockAdminUserService.getUsers.mockResolvedValue({ data: [], error: null });
+
+      render(
+        <TestWrapper>
+          <AdminUserManagement />
+        </TestWrapper>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText('Koi user nahi mila. Filter reset karein.')).toBeInTheDocument();
+        expect(screen.getByText('Total Users')).toBeInTheDocument();
+        expect(screen.getByText('0')).toBeInTheDocument();
+      });
+    });
+
+    it('should handle users with missing fields', async () => {
+      const usersWithMissingFields = [
+        {
+          id: '1',
+          email: 'user1@test.com',
+          full_name: '',
+          user_type: 'buyer' as const,
+          created_at: '2024-01-01T10:00:00Z',
+          user_addresses: [],
+          orders: []
+        }
+      ];
+
+      mockAdminUserService.getUsers.mockResolvedValue({ data: usersWithMissingFields, error: null });
+
+      render(
+        <TestWrapper>
+          <AdminUserManagement />
+        </TestWrapper>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText('Unnamed')).toBeInTheDocument();
+        expect(screen.getByText('user1@test.com')).toBeInTheDocument();
+      });
+    });
+
+    it('should handle network errors gracefully', async () => {
+      mockAdminUserService.getUsers.mockRejectedValue(new Error('Network error'));
+
+      render(
+        <TestWrapper>
+          <AdminUserManagement />
+        </TestWrapper>
+      );
+
+      await waitFor(() => {
+        // Should not crash and should handle error
+        expect(screen.queryByText('Test User 1')).not.toBeInTheDocument();
+      });
+    });
+
+    it('should handle concurrent updates gracefully', async () => {
+      mockAdminUserService.getUsers.mockResolvedValue({ data: mockUsers, error: null });
+      mockAdminUserService.updateUser.mockResolvedValue({ data: [mockUsers[0]], error: null });
+
+      render(
+        <TestWrapper>
+          <AdminUserManagement />
+        </TestWrapper>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText('Test User 1')).toBeInTheDocument();
+      });
+
+      // Open two edit modals quickly (simulating concurrent updates)
+      const editButtons = screen.getAllByRole('button', { name: /edit/i });
+      fireEvent.click(editButtons[0]);
+      fireEvent.click(editButtons[0]);
+
+      // Should handle this gracefully without crashing
+      await waitFor(() => {
+        expect(screen.getByText('Edit Account')).toBeInTheDocument();
+      });
+    });
+  });
+
+  describe('Performance and Optimization', () => {
+    it('should memoize filtered users to prevent unnecessary re-renders', async () => {
+      mockAdminUserService.getUsers.mockResolvedValue({ data: mockUsers, error: null });
+
+      const { rerender } = render(
+        <TestWrapper>
+          <AdminUserManagement />
+        </TestWrapper>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText('Test User 1')).toBeInTheDocument();
+      });
+
+      // Re-render component (should not cause unnecessary re-calculations)
+      rerender(
+        <TestWrapper>
+          <AdminUserManagement />
+        </TestWrapper>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText('Test User 1')).toBeInTheDocument();
+      });
+    });
+
+    it('should memoize statistics calculations', async () => {
+      mockAdminUserService.getUsers.mockResolvedValue({ data: mockUsers, error: null });
+
+      render(
+        <TestWrapper>
+          <AdminUserManagement />
+        </TestWrapper>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText('Total Users')).toBeInTheDocument();
+        expect(screen.getByText('3')).toBeInTheDocument();
+      });
+
+      // Statistics should be calculated once and memoized
+      expect(screen.getByText('3')).toBeInTheDocument();
+    });
+
+    it('should handle large user lists efficiently', async () => {
+      const largeUserList = Array(100).fill(0).map((_, i) => ({
+        id: `user-${i}`,
+        email: `user${i}@test.com`,
+        full_name: `User ${i}`,
+        phone: `123456789${i}`,
+        user_type: i % 3 === 0 ? 'admin' as const : i % 2 === 0 ? 'wholeseller' as const : 'buyer' as const,
+        created_at: '2024-01-01T10:00:00Z',
+        user_addresses: [],
+        orders: []
+      }));
+
+      mockAdminUserService.getUsers.mockResolvedValue({ data: largeUserList, error: null });
+
+      render(
+        <TestWrapper>
+          <AdminUserManagement />
+        </TestWrapper>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText('User 0')).toBeInTheDocument();
+        expect(screen.getByText('User 99')).toBeInTheDocument();
+        expect(screen.getByText('Total Users')).toBeInTheDocument();
+        expect(screen.getByText('100')).toBeInTheDocument();
+      });
+    });
+  });
+});

@@ -1,4 +1,3 @@
-import React from "react";
 import ReactDOM from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
 
@@ -17,7 +16,9 @@ import App from "./App";
 ReactDOM.createRoot(
   document.getElementById("root") as HTMLElement
 ).render(
-  <React.StrictMode>
+  // React.StrictMode commented out temporarily for development debugging
+  // This prevents double rendering issues that can cause admin timeout problems
+  // <React.StrictMode>
     <BrowserRouter
       future={{
         v7_startTransition: true,
@@ -36,5 +37,5 @@ ReactDOM.createRoot(
         </AdminProvider>
       </AuthProvider>
     </BrowserRouter>
-  </React.StrictMode>
+  // </React.StrictMode>
 );

@@ -13,7 +13,7 @@ const HERO_CONSTANTS = {
   },
   ROUTES: {
     BUYER: "/buyer",
-    WHOLESALER: "/wholeseller"
+    WHOLESALER: "/wholesaler"
   },
   LABELS: {
     BUYER_BUTTON: "Shop as Buyer",

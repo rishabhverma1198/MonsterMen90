@@ -5,6 +5,8 @@ type UserType = "buyer" | "wholesaler" | null;
 interface UserTypeContextType {
   userType: UserType;
   setUserType: (type: UserType) => void;
+  validateUserType: () => UserType;
+  clearUserType: () => void;
 }
 
 export const UserTypeContext = createContext<UserTypeContextType | undefined>(undefined);

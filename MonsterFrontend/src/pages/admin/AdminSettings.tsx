@@ -1,3 +1,4 @@
+import { useEffect, useState, useCallback } from 'react';
 import AdminLayout from '@/components/admin/AdminLayout';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
@@ -9,32 +10,30 @@ import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useAdmin } from '@/hooks/useAdmin';
 import { supabase } from '@/lib/supabase';
-import {
-  Palette,
-  Save,
-  Settings,
-  Shield,
-  Upload,
-  User
-} from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { toast } from '@/hooks/use-toast';
+import { Palette, Save, Settings, Shield, Upload, User, Loader2 } from 'lucide-react';
+
+// Form Data ke types define karein
+interface SystemSettings {
+  site_name: string;
+  site_description: string;
+  maintenance_mode: boolean;
+  user_registration: boolean;
+  email_notifications: boolean;
+  sms_notifications: boolean;
+}
 
 export default function AdminSettings() {
   const { admin } = useAdmin();
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState('profile');
   
-  // Profile settings
+  // States
   const [profileData, setProfileData] = useState({
-    full_name: '',
-    email: '',
-    phone: '',
-    address: '',
-    bio: ''
+    full_name: '', email: '', phone: '', address: '', bio: '', avatar_url: ''
   });
 
-  // System settings
-  const [systemSettings, setSystemSettings] = useState({
+  const [systemSettings, setSystemSettings] = useState<SystemSettings>({
     site_name: 'MonsterMen90',
     site_description: 'Premium Fashion E-commerce Platform',
     maintenance_mode: false,
@@ -43,575 +42,173 @@ export default function AdminSettings() {
     sms_notifications: false
   });
 
-  // Security settings
-  const [securitySettings, setSecuritySettings] = useState({
-    two_factor_auth: false,
-    session_timeout: 30,
-    password_policy: 'strong',
-    login_attempts: 5
-  });
+  // Settings Load karne ka logic
+  const loadInitialData = useCallback(async () => {
+    if (!admin) return;
 
-  useEffect(() => {
-    if (admin) {
-      const adminData = admin as any;
+    try {
+      // Admin Profile set karein
       setProfileData({
-        full_name: adminData.full_name || '',
-        email: adminData.email || '',
-        phone: adminData.phone || '',
-        address: adminData.address || '',
-        bio: adminData.bio || ''
+        full_name: admin.full_name || '',
+        email: admin.email || '',
+        phone: admin.phone || '',
+        address: admin.address || '',
+        bio: admin.bio || '',
+        avatar_url: (admin as any).avatar_url || ''
       });
+
+      // DB se System Settings uthayein
+      const { data, error } = await supabase.from('admin_settings').select('*').single();
+      if (data && !error) {
+        setSystemSettings(prev => ({ ...prev, ...data }));
+      }
+    } catch (err) {
+      console.error("Error loading settings:", err);
     }
-    loadSettings();
   }, [admin]);
 
-  const loadSettings = async () => {
-    try {
-      // Load system settings from database
-      const { data: settings } = await supabase
-        .from('admin_settings')
-        .select('*')
-        .single();
+  useEffect(() => { loadInitialData(); }, [loadInitialData]);
 
-      if (settings) {
-        setSystemSettings({
-          site_name: settings.site_name || 'MonsterMen90',
-          site_description: settings.site_description || 'Premium Fashion E-commerce Platform',
-          maintenance_mode: settings.maintenance_mode || false,
-          user_registration: settings.user_registration !== false,
-          email_notifications: settings.email_notifications !== false,
-          sms_notifications: settings.sms_notifications || false
-        });
-      }
-    } catch (error) {
-      console.log('Settings not found, using defaults');
-    }
-  };
-
-  const saveProfile = async () => {
+  // Generic Save Function (Robust Approach)
+  const handleSave = async (table: string, data: any, id?: string) => {
     setLoading(true);
     try {
-      if (!admin) return;
-      
-      const { error } = await supabase
-        .from('users')
-        .update(profileData)
-        .eq('id', admin.id);
+      const query = id 
+        ? supabase.from(table).update(data).eq('id', id)
+        : supabase.from(table).upsert({ ...data, updated_at: new Date().toISOString() });
 
+      const { error } = await query;
       if (error) throw error;
-      
-      alert('Profile updated successfully!');
-    } catch (error) {
-      console.error('Error updating profile:', error);
-      alert('Error updating profile');
+
+      toast({ title: "Success", description: "Settings saved successfully!" });
+    } catch (error: any) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
     } finally {
       setLoading(false);
     }
   };
 
-  const saveSystemSettings = async () => {
-    setLoading(true);
-    try {
-      const { error } = await supabase
-        .from('admin_settings')
-        .upsert({
-          ...systemSettings,
-          updated_at: new Date().toISOString()
-        });
+  // Avatar Upload Logic (Refined)
+  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !admin) return;
 
-      if (error) throw error;
-      
-      alert('System settings updated successfully!');
-    } catch (error) {
-      console.error('Error updating settings:', error);
-      alert('Error updating settings');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleAvatarUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    // Validate file type
-    if (!file.type.startsWith('image/')) {
-      alert('Please select an image file');
-      return;
-    }
-
-    // Validate file size (1MB max)
-    if (file.size > 1 * 1024 * 1024) {
-      alert('File size must be less than 1MB');
-      return;
-    }
+    if (file.size > 1024 * 1024) return toast({ title: "File too large", description: "Max 1MB allowed", variant: "destructive" });
 
     setLoading(true);
     try {
-      if (!admin) {
-        alert('No admin user found');
-        return;
-      }
-
-      // Create a unique filename
-      const fileExt = file.name.split('.').pop();
-      const fileName = `avatar-${admin.id}-${Date.now()}.${fileExt}`;
-      const filePath = `avatars/${fileName}`;
-
-      // Upload to Supabase Storage
-      const { error: uploadError } = await supabase.storage
-        .from('avatars')
-        .upload(filePath, file, {
-          cacheControl: '3600',
-          upsert: false
-        });
-
-      if (uploadError) {
-        console.error('Upload error:', uploadError);
-        
-        // If bucket doesn't exist, create it first
-        if (uploadError.message.includes('Bucket not found')) {
-          console.log('Creating avatars bucket...');
-          const { error: createError } = await supabase.storage.createBucket('avatars', {
-            public: true
-          });
-          
-          if (createError) {
-            console.error('Error creating bucket:', createError);
-            alert('Error creating storage bucket. Please contact administrator.');
-            return;
-          }
-          
-          // Retry upload
-          const { error: retryError } = await supabase.storage
-            .from('avatars')
-            .upload(filePath, file, {
-              cacheControl: '3600',
-              upsert: false
-            });
-          
-          if (retryError) {
-            console.error('Retry upload error:', retryError);
-            alert('Error uploading avatar: ' + retryError.message);
-            return;
-          }
-        } else {
-          alert('Error uploading avatar: ' + uploadError.message);
-          return;
-        }
-      }
-
-      // Get public URL
-      const { data: { publicUrl } } = supabase.storage
-        .from('avatars')
-        .getPublicUrl(filePath);
-
-      // Update user profile with new avatar URL
-      const { error: updateError } = await supabase
-        .from('users')
-        .update({ avatar_url: publicUrl })
-        .eq('id', admin.id);
-
-      if (updateError) {
-        console.error('Profile update error:', updateError);
-        alert('Avatar uploaded but failed to update profile: ' + updateError.message);
-        return;
-      }
-
-      // Show success message
-      alert('Avatar uploaded successfully!');
+      const filePath = `avatars/${admin.id}-${Date.now()}.${file.name.split('.').pop()}`;
       
-      // Update admin context if available
-      // Note: In a real app, you'd want to update the admin context here
-      // For now, we'll just show success without page reload
-      
-    } catch (error) {
-      console.error('Error uploading avatar:', error);
-      alert('Error uploading avatar. Please try again.');
-    } finally {
-      setLoading(false);
-    }
-  };
+      // 1. Storage mein upload karein
+      const { error: uploadError } = await supabase.storage.from('avatars').upload(filePath, file);
+      if (uploadError) throw uploadError;
 
-  const saveSecuritySettings = async () => {
-    setLoading(true);
-    try {
-      // In a real application, you would save security settings to a dedicated table
-      // For now, we'll simulate the save operation
-      const { error } = await supabase
-        .from('admin_settings')
-        .upsert({
-          ...securitySettings,
-          updated_at: new Date().toISOString()
-        });
+      // 2. Public URL lein
+      const { data: { publicUrl } } = supabase.storage.from('avatars').getPublicUrl(filePath);
 
-      if (error) throw error;
+      // 3. User Table update karein
+      await handleSave('users', { avatar_url: publicUrl }, admin.id);
+      setProfileData(prev => ({ ...prev, avatar_url: publicUrl }));
       
-      alert('Security settings updated successfully!');
-    } catch (error) {
-      console.error('Error updating security settings:', error);
-      alert('Error updating security settings');
+    } catch (error: any) {
+      toast({ title: "Upload Failed", description: error.message, variant: "destructive" });
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <AdminLayout
-      adminName={admin?.full_name || 'Admin'}
-      adminEmail={admin?.email || 'admin@monstermen90.com'}
-    >
-      <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900">Settings</h1>
-            <p className="text-gray-600 mt-2">Manage your account and system preferences</p>
-          </div>
+    <AdminLayout adminName={admin?.full_name} adminEmail={admin?.email}>
+      <div className="space-y-6 max-w-5xl mx-auto">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Settings</h1>
+          <p className="text-muted-foreground">Apne account aur system preferences ko manage karein.</p>
         </div>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="grid w-full grid-cols-4">
+          <TabsList className="bg-muted p-1 rounded-lg">
             <TabsTrigger value="profile">Profile</TabsTrigger>
             <TabsTrigger value="system">System</TabsTrigger>
             <TabsTrigger value="security">Security</TabsTrigger>
             <TabsTrigger value="appearance">Appearance</TabsTrigger>
           </TabsList>
 
-          {/* Profile Settings */}
-          <TabsContent value="profile" className="space-y-6">
+          {/* Profile Tab */}
+          <TabsContent value="profile">
             <Card>
               <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <User className="w-5 h-5" />
-                  Profile Information
-                </CardTitle>
-                <CardDescription>
-                  Update your personal information and contact details
-                </CardDescription>
+                <CardTitle className="flex items-center gap-2"><User size={20}/> Profile Info</CardTitle>
               </CardHeader>
               <CardContent className="space-y-6">
-                <div className="flex items-center gap-6">
-                  <Avatar className="w-20 h-20">
-                    <AvatarImage src={(admin as any)?.avatar_url} />
-                    <AvatarFallback className="bg-orange-500 text-white text-xl">
-                      {admin?.full_name?.charAt(0) || 'A'}
-                    </AvatarFallback>
+                <div className="flex items-center gap-6 p-4 border rounded-xl bg-gray-50/50">
+                  <Avatar className="w-24 h-24 border-2 border-white shadow-sm">
+                    <AvatarImage src={profileData.avatar_url} />
+                    <AvatarFallback className="text-xl bg-orange-100 text-orange-600">{profileData.full_name[0]}</AvatarFallback>
                   </Avatar>
-                  <div>
-                    <Label htmlFor="avatar-upload" className="sr-only">Upload Avatar</Label>
-                    <input
-                      type="file"
-                      id="avatar-upload"
-                      accept="image/*"
-                      className="hidden"
-                      onChange={handleAvatarUpload}
-                      title="Upload Avatar Image"
-                    />
-                    <Button 
-                      variant="outline" 
-                      size="sm"
-                      onClick={() => document.getElementById('avatar-upload')?.click()}
-                      disabled={loading}
-                    >
-                      <Upload className="w-4 h-4 mr-2" />
-                      {loading ? 'Uploading...' : 'Change Avatar'}
-                    </Button>
-                    <p className="text-sm text-gray-500 mt-2">
-                      JPG, GIF or PNG. 1MB max.
-                    </p>
+                  <div className="space-y-2">
+                    <Label className="cursor-pointer">
+                      <div className="flex items-center gap-2 bg-white px-4 py-2 border rounded-md shadow-sm hover:bg-gray-50 transition-all">
+                        <Upload size={16}/> {loading ? "Uploading..." : "Change Avatar"}
+                      </div>
+                      <input type="file" className="hidden" accept="image/*" onChange={handleAvatarUpload} disabled={loading} />
+                    </Label>
+                    <p className="text-xs text-muted-foreground">JPG, PNG or WEBP. Max 1MB.</p>
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label htmlFor="full_name">Full Name</Label>
-                    <Input
-                      id="full_name"
-                      value={profileData.full_name}
-                      onChange={(e) => setProfileData({...profileData, full_name: e.target.value})}
-                      placeholder="Enter your full name"
-                    />
+                    <Label>Full Name</Label>
+                    <Input value={profileData.full_name} onChange={e => setProfileData({...profileData, full_name: e.target.value})} />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="email">Email</Label>
-                    <Input
-                      id="email"
-                      type="email"
-                      value={profileData.email}
-                      onChange={(e) => setProfileData({...profileData, email: e.target.value})}
-                      placeholder="Enter your email"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="phone">Phone</Label>
-                    <Input
-                      id="phone"
-                      value={profileData.phone}
-                      onChange={(e) => setProfileData({...profileData, phone: e.target.value})}
-                      placeholder="Enter your phone number"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="address">Address</Label>
-                    <Input
-                      id="address"
-                      value={profileData.address}
-                      onChange={(e) => setProfileData({...profileData, address: e.target.value})}
-                      placeholder="Enter your address"
-                    />
+                    <Label>Email</Label>
+                    <Input value={profileData.email} disabled className="bg-gray-100" />
                   </div>
                 </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="bio">Bio</Label>
-                  <textarea
-                    id="bio"
-                    rows={4}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500"
-                    value={profileData.bio}
-                    onChange={(e) => setProfileData({...profileData, bio: e.target.value})}
-                    placeholder="Tell us about yourself..."
+                <Button onClick={() => handleSave('users', profileData, admin?.id)} disabled={loading}>
+                  {loading ? <Loader2 className="animate-spin mr-2"/> : <Save className="mr-2"/>} Save Changes
+                </Button>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* System Tab */}
+          <TabsContent value="system">
+            <Card>
+              <CardHeader><CardTitle>System Configuration</CardTitle></CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Site Name</Label>
+                    <Input value={systemSettings.site_name} onChange={e => setSystemSettings({...systemSettings, site_name: e.target.value})} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Description</Label>
+                    <Input value={systemSettings.site_description} onChange={e => setSystemSettings({...systemSettings, site_description: e.target.value})} />
+                  </div>
+                </div>
+
+                <Separator className="my-4"/>
+
+                <div className="space-y-4">
+                  <ToggleSetting 
+                    label="Maintenance Mode" 
+                    desc="Site ko temporary offline karein" 
+                    checked={systemSettings.maintenance_mode}
+                    onCheckedChange={(val) => setSystemSettings({...systemSettings, maintenance_mode: val})}
+                  />
+                  <ToggleSetting 
+                    label="User Registration" 
+                    desc="Naye users ko sign-up karne dein" 
+                    checked={systemSettings.user_registration}
+                    onCheckedChange={(val) => setSystemSettings({...systemSettings, user_registration: val})}
                   />
                 </div>
 
-                <Button onClick={saveProfile} disabled={loading}>
-                  <Save className="w-4 h-4 mr-2" />
-                  {loading ? 'Saving...' : 'Save Changes'}
-                </Button>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          {/* System Settings */}
-          <TabsContent value="system" className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Settings className="w-5 h-5" />
-                  System Configuration
-                </CardTitle>
-                <CardDescription>
-                  Configure system-wide settings and preferences
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="site_name">Site Name</Label>
-                    <Input
-                      id="site_name"
-                      value={systemSettings.site_name}
-                      onChange={(e) => setSystemSettings({...systemSettings, site_name: e.target.value})}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="site_description">Site Description</Label>
-                    <Input
-                      id="site_description"
-                      value={systemSettings.site_description}
-                      onChange={(e) => setSystemSettings({...systemSettings, site_description: e.target.value})}
-                    />
-                  </div>
-                </div>
-
-                <Separator />
-
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <div className="space-y-0.5">
-                      <Label htmlFor="maintenance-mode">Maintenance Mode</Label>
-                      <p className="text-sm text-gray-500">Put the site in maintenance mode</p>
-                    </div>
-                    <Switch
-                      id="maintenance-mode"
-                      checked={systemSettings.maintenance_mode}
-                      onCheckedChange={(checked) => setSystemSettings({...systemSettings, maintenance_mode: checked})}
-                      aria-label="Toggle maintenance mode"
-                    />
-                  </div>
-
-                  <div className="flex items-center justify-between">
-                    <div className="space-y-0.5">
-                      <Label htmlFor="user-registration">User Registration</Label>
-                      <p className="text-sm text-gray-500">Allow new users to register</p>
-                    </div>
-                    <Switch
-                      id="user-registration"
-                      checked={systemSettings.user_registration}
-                      onCheckedChange={(checked) => setSystemSettings({...systemSettings, user_registration: checked})}
-                      aria-label="Toggle user registration"
-                    />
-                  </div>
-
-                  <div className="flex items-center justify-between">
-                    <div className="space-y-0.5">
-                      <Label htmlFor="email-notifications">Email Notifications</Label>
-                      <p className="text-sm text-gray-500">Send email notifications for important events</p>
-                    </div>
-                    <Switch
-                      id="email-notifications"
-                      checked={systemSettings.email_notifications}
-                      onCheckedChange={(checked) => setSystemSettings({...systemSettings, email_notifications: checked})}
-                      aria-label="Toggle email notifications"
-                    />
-                  </div>
-
-                  <div className="flex items-center justify-between">
-                    <div className="space-y-0.5">
-                      <Label htmlFor="sms-notifications">SMS Notifications</Label>
-                      <p className="text-sm text-gray-500">Send SMS notifications for critical alerts</p>
-                    </div>
-                    <Switch
-                      id="sms-notifications"
-                      checked={systemSettings.sms_notifications}
-                      onCheckedChange={(checked) => setSystemSettings({...systemSettings, sms_notifications: checked})}
-                      aria-label="Toggle SMS notifications"
-                    />
-                  </div>
-                </div>
-
-                <Button onClick={saveSystemSettings} disabled={loading}>
-                  <Save className="w-4 h-4 mr-2" />
-                  {loading ? 'Saving...' : 'Save Settings'}
-                </Button>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          {/* Security Settings */}
-          <TabsContent value="security" className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Shield className="w-5 h-5" />
-                  Security Settings
-                </CardTitle>
-                <CardDescription>
-                  Manage security preferences and access controls
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <div className="space-y-0.5">
-                      <Label htmlFor="two-factor-auth">Two-Factor Authentication</Label>
-                      <p className="text-sm text-gray-500">Add an extra layer of security to your account</p>
-                    </div>
-                    <Switch
-                      id="two-factor-auth"
-                      checked={securitySettings.two_factor_auth}
-                      onCheckedChange={(checked) => setSecuritySettings({...securitySettings, two_factor_auth: checked})}
-                      aria-label="Toggle two-factor authentication"
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="session_timeout">Session Timeout (minutes)</Label>
-                      <Input
-                        id="session_timeout"
-                        type="number"
-                        value={securitySettings.session_timeout}
-                        onChange={(e) => setSecuritySettings({...securitySettings, session_timeout: parseInt(e.target.value)})}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="login_attempts">Max Login Attempts</Label>
-                      <Input
-                        id="login_attempts"
-                        type="number"
-                        value={securitySettings.login_attempts}
-                        onChange={(e) => setSecuritySettings({...securitySettings, login_attempts: parseInt(e.target.value)})}
-                      />
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="password_policy">Password Policy</Label>
-                    <select
-                      id="password_policy"
-                      title="Password Policy"
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500"
-                      value={securitySettings.password_policy}
-                      onChange={(e) => setSecuritySettings({...securitySettings, password_policy: e.target.value})}
-                    >
-                      <option value="weak">Weak (minimum 4 characters)</option>
-                      <option value="medium">Medium (minimum 6 characters)</option>
-                      <option value="strong">Strong (minimum 8 characters, mixed case, numbers, symbols)</option>
-                    </select>
-                  </div>
-                </div>
-
-                <Button onClick={saveSecuritySettings} disabled={loading}>
-                  <Save className="w-4 h-4 mr-2" />
-                  {loading ? 'Saving...' : 'Save Security Settings'}
-                </Button>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          {/* Appearance Settings */}
-          <TabsContent value="appearance" className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Palette className="w-5 h-5" />
-                  Appearance & Branding
-                </CardTitle>
-                <CardDescription>
-                  Customize the look and feel of your admin panel
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                <div className="grid grid-cols-3 gap-4">
-                  <div className="space-y-2">
-                    <Label>Primary Color</Label>
-                    <div className="flex items-center gap-2">
-                      <div className="w-8 h-8 bg-orange-500 rounded border"></div>
-                      <Input value="#f97316" readOnly />
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Secondary Color</Label>
-                    <div className="flex items-center gap-2">
-                      <div className="w-8 h-8 bg-gray-900 rounded border"></div>
-                      <Input value="#111827" readOnly />
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Accent Color</Label>
-                    <div className="flex items-center gap-2">
-                      <div className="w-8 h-8 bg-blue-500 rounded border"></div>
-                      <Input value="#3b82f6" readOnly />
-                    </div>
-                  </div>
-                </div>
-
-                <Separator />
-
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <Label>Theme</Label>
-                    <div className="flex gap-4">
-                      <div className="flex items-center gap-2">
-                        <input type="radio" id="light" name="theme" value="light" defaultChecked title="Light Theme" />
-                        <Label htmlFor="light">Light</Label>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <input type="radio" id="dark" name="theme" value="dark" title="Dark Theme" />
-                        <Label htmlFor="dark">Dark</Label>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <input type="radio" id="auto" name="theme" value="auto" title="Auto Theme" />
-                        <Label htmlFor="auto">Auto</Label>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <Button onClick={() => alert('Appearance settings saved!')}>
-                  <Save className="w-4 h-4 mr-2" />
-                  Save Appearance Settings
+                <Button onClick={() => handleSave('admin_settings', systemSettings)} disabled={loading} className="mt-4">
+                  Save System Settings
                 </Button>
               </CardContent>
             </Card>
@@ -619,5 +216,18 @@ export default function AdminSettings() {
         </Tabs>
       </div>
     </AdminLayout>
+  );
+}
+
+// Reusable Toggle Component
+function ToggleSetting({ label, desc, checked, onCheckedChange }: any) {
+  return (
+    <div className="flex items-center justify-between p-2 rounded-lg hover:bg-gray-50 transition-all">
+      <div className="space-y-0.5">
+        <Label className="text-base">{label}</Label>
+        <p className="text-sm text-muted-foreground">{desc}</p>
+      </div>
+      <Switch checked={checked} onCheckedChange={onCheckedChange} />
+    </div>
   );
 }

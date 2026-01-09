@@ -34,5 +34,8 @@
     "monster-men90"
   ],
   "author": "Monster Men90 Team",
-  "license": "MIT"
+  "license": "MIT",
+  "dependencies": {
+    "axios": "^1.13.2"
+  }
 }

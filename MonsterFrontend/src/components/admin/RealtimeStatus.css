@@ -1,0 +1,35 @@
+/* RealtimeStatus Component Styles */
+
+.realtime-status-container {
+  margin-bottom: 16px;
+}
+
+.realtime-status-indicator {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  margin-right: 8px;
+  transition: background-color 0.3s ease;
+}
+
+.realtime-status-indicator.healthy {
+  background-color: #16a34a; /* green-600 */
+}
+
+.realtime-status-indicator.unhealthy {
+  background-color: #dc2626; /* red-600 */
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+  .realtime-status-container {
+    margin-bottom: 12px;
+  }
+  
+  .realtime-status-indicator {
+    width: 8px;
+    height: 8px;
+    margin-right: 6px;
+  }
+}

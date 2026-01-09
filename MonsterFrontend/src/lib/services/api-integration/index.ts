@@ -8,7 +8,8 @@ export { RateLimiter } from './rate-limiter.ts';
 // export { RequestQueue } from './request-queue';
 
 // Providers - Only implemented providers are exported
-export { FakeStoreAPIClient } from './providers/fakestore.client.ts';
+// TODO: Implement FakeStoreAPIClient when needed
+// export { FakeStoreAPIClient } from './providers/fakestore.client.ts';
 // TODO: Implement other providers when needed
 // export { ShopifyAPIClient } from './providers/shopify.client';
 // export { WooCommerceAPIClient } from './providers/woocommerce.client';

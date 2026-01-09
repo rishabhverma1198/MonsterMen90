@@ -1,58 +1,47 @@
-import { defineConfig } from 'vite'
-import react from '@vitejs/plugin-react'
-import path from 'path'
-import { fileURLToPath } from 'url'
+import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react";
+import path from "path";
+import { fileURLToPath } from "url";
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url))
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-// https://vite.dev/config/
 export default defineConfig({
   plugins: [react()],
   resolve: {
     alias: {
-      '@': path.resolve(__dirname, 'src'),
+      "@": path.resolve(__dirname, "./src"),
     },
   },
+  server: {
+    port: 5173,
+    open: false,
+    hmr: {
+      overlay: true
+    }
+  },
   build: {
-    // Enable minification and compression
+    target: 'esnext',
     minify: 'terser',
     terserOptions: {
       compress: {
         drop_console: true,
         drop_debugger: true,
-      },
+        pure_funcs: ['console.log', 'console.info']
+      }
     },
-    // Optimize chunks for better caching
     rollupOptions: {
       output: {
         manualChunks: {
-          // Separate vendor chunks for better caching
-          vendor: ['react', 'react-dom'],
-          router: ['react-router-dom'],
-          ui: ['@radix-ui/react-dialog', '@radix-ui/react-dropdown-menu'],
-          supabase: ['@supabase/supabase-js'],
-        },
-      },
+          vendor: ['react', 'react-dom', 'react-router-dom'],
+          ui: ['@radix-ui/react-dialog', '@radix-ui/react-dropdown-menu', 'lucide-react'],
+          charts: ['recharts'],
+          supabase: ['@supabase/supabase-js']
+        }
+      }
     },
-    // Target modern browsers for better performance
-    target: 'esnext',
-    // Optimize CSS
-    cssCodeSplit: true,
+    chunkSizeWarningLimit: 1000
   },
-  // Enable development server optimizations
-  server: {
-    hmr: {
-      overlay: false,
-    },
-  },
-  // Optimize dependencies
   optimizeDeps: {
-    include: [
-      'react',
-      'react-dom',
-      'react-router-dom',
-      '@supabase/supabase-js',
-      'lucide-react'
-    ],
-  },
-})
+    include: ['react', 'react-dom', 'react-router-dom', '@supabase/supabase-js']
+  }
+});

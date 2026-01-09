@@ -1,618 +1,258 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { 
-  Users, 
-  Search, 
-  UserCheck, 
-  Shield, 
-  ShoppingBag, 
-  DollarSign,
-  Eye,
-  Edit,
-  Trash2,
-  Mail,
-  Phone,
-  MapPin
+  Users, Search, UserCheck, Shield, ShoppingBag, DollarSign,
+  Eye, Edit, Trash2, Mail, Phone, MapPin, Loader2, FilterX
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { 
-  Dialog, 
-  DialogContent, 
-  DialogDescription, 
-  DialogHeader, 
-  DialogTitle 
-} from '@/components/ui/dialog';
-import { 
-  Table, 
-  TableBody, 
-  TableCell, 
-  TableHead, 
-  TableHeader, 
-  TableRow 
-} from '@/components/ui/table';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from '@/hooks/use-toast';
 import { adminUserService } from '@/lib/services/admin.service';
-import { AuthorizationError, ForbiddenError } from '@/lib/services/authorization.service';
 
+// --- Types ---
 interface User {
   id: string;
   email: string;
   full_name: string;
   phone?: string;
   user_type: 'buyer' | 'wholeseller' | 'admin';
+  avatar_url?: string;
   created_at: string;
-  updated_at: string;
-  user_addresses?: {
-    id: string;
-    address_line_1: string;
-    city: string;
-    state: string;
-    pincode: string;
-    is_default: boolean;
-  }[];
-  orders?: {
-    id: string;
-    total_amount: number;
-    status: string;
-  }[];
-}
-
-interface UserStats {
-  totalUsers: number;
-  buyers: number;
-  wholesalers: number;
-  admins: number;
-  activeUsers: number;
-  totalSpent: number;
+  user_addresses?: any[];
+  orders?: { id: string; total_amount: number; status: string; }[];
 }
 
 export default function AdminUserManagement() {
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  const [userTypeFilter, setUserTypeFilter] = useState<string>('all');
+  const [userTypeFilter, setUserTypeFilter] = useState('all');
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
-  const [isDetailDialogOpen, setIsDetailDialogOpen] = useState(false);
-  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
-  const [editFormData, setEditFormData] = useState({
-    full_name: '',
-    phone: '',
-    user_type: 'buyer' as 'buyer' | 'wholeseller' | 'admin'
-  });
+  const [dialogs, setDialogs] = useState({ detail: false, edit: false });
+  const [isUpdating, setIsUpdating] = useState(false);
 
-  useEffect(() => {
-    fetchUsers();
-  }, []);
+  const [editFormData, setEditFormData] = useState({ full_name: '', phone: '', user_type: 'buyer' as any });
 
-  const fetchUsers = async () => {
+  // --- Logic: Data Fetching ---
+  const fetchUsers = useCallback(async () => {
     try {
+      setLoading(true);
       const { data, error } = await adminUserService.getUsers();
-
       if (error) throw error;
       setUsers(data || []);
-    } catch (error) {
-      console.error('Error fetching users:', error);
-      
-      // Handle authorization errors
-      if (error instanceof AuthorizationError || error instanceof ForbiddenError) {
-        toast({
-          title: "Access Denied",
-          description: "You don't have permission to view users.",
-          variant: "destructive"
-        });
-      } else {
-        toast({
-          title: "Error",
-          description: "Failed to fetch users",
-          variant: "destructive"
-        });
-      }
+    } catch (err: any) {
+      toast({ title: "Fetch Failed", description: err.message, variant: "destructive" });
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  const updateUser = async (userId: string, updates: Partial<User>) => {
-    try {
-      // Check if this update includes changing to admin role
-      if (updates.user_type === 'admin') {
-        // This requires special permission for admin promotion
-        toast({
-          title: "Permission Required",
-          description: "Admin promotion requires super admin privileges.",
-          variant: "destructive"
-        });
-        return;
-      }
+  useEffect(() => { fetchUsers(); }, [fetchUsers]);
 
-      const { error } = await adminUserService.updateUser(userId, updates);
-
-      if (error) throw error;
-
-      toast({
-        title: "Success",
-        description: "User updated successfully"
-      });
-
-      fetchUsers();
-    } catch (error) {
-      console.error('Error updating user:', error);
-      
-      // Handle authorization errors
-      if (error instanceof AuthorizationError || error instanceof ForbiddenError) {
-        toast({
-          title: "Access Denied",
-          description: "You don't have permission to update users.",
-          variant: "destructive"
-        });
-      } else {
-        toast({
-          title: "Error",
-          description: "Failed to update user",
-          variant: "destructive"
-        });
-      }
-    }
-  };
-
-  const deleteUser = async (userId: string) => {
-    if (!confirm('Are you sure you want to delete this user? This action cannot be undone.')) return;
-
-    try {
-      const { error } = await adminUserService.deactivateUser(userId);
-
-      if (error) throw error;
-
-      toast({
-        title: "Success",
-        description: "User deactivated successfully"
-      });
-
-      fetchUsers();
-    } catch (error) {
-      console.error('Error deactivating user:', error);
-      
-      // Handle authorization errors
-      if (error instanceof AuthorizationError || error instanceof ForbiddenError) {
-        toast({
-          title: "Access Denied",
-          description: "You don't have permission to deactivate users.",
-          variant: "destructive"
-        });
-      } else {
-        toast({
-          title: "Error",
-          description: "Failed to deactivate user",
-          variant: "destructive"
-        });
-      }
-    }
-  };
-
-  const openEditDialog = (user: User) => {
-    setSelectedUser(user);
-    setEditFormData({
-      full_name: user.full_name,
-      phone: user.phone || '',
-      user_type: user.user_type
-    });
-    setIsEditDialogOpen(true);
-  };
-
-  const handleEditUser = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedUser) return;
-
-    await updateUser(selectedUser.id, editFormData);
-    setIsEditDialogOpen(false);
-  };
-
-  const getUserTypeColor = (userType: string) => {
-    switch (userType) {
-      case 'buyer': return 'bg-blue-100 text-blue-800';
-      case 'wholeseller': return 'bg-purple-100 text-purple-800';
-      case 'admin': return 'bg-red-100 text-red-800';
-      default: return 'bg-gray-100 text-gray-800';
-    }
-  };
-
-  const getUserTypeIcon = (userType: string) => {
-    switch (userType) {
-      case 'buyer': return <UserCheck className="h-4 w-4" />;
-      case 'wholeseller': return <ShoppingBag className="h-4 w-4" />;
-      case 'admin': return <Shield className="h-4 w-4" />;
-      default: return <Users className="h-4 w-4" />;
-    }
-  };
-
-  const filteredUsers = users.filter(user => {
-    const matchesSearch = user.full_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         user.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         user.phone?.includes(searchTerm);
-    const matchesUserType = userTypeFilter === 'all' || user.user_type === userTypeFilter;
-    return matchesSearch && matchesUserType;
-  });
-
-  const userStats: UserStats = {
-    totalUsers: users.length,
+  // --- Logic: Analytics (Performance Optimized) ---
+  const stats = useMemo(() => ({
+    total: users.length,
     buyers: users.filter(u => u.user_type === 'buyer').length,
     wholesalers: users.filter(u => u.user_type === 'wholeseller').length,
-    admins: users.filter(u => u.user_type === 'admin').length,
-    activeUsers: users.filter(u => u.orders && u.orders.length > 0).length,
-    totalSpent: users.reduce((sum, user) => 
-      sum + (user.orders?.reduce((orderSum, order) => orderSum + (order.total_amount || 0), 0) || 0), 0
-    )
+    revenue: users.reduce((acc, u) => acc + (u.orders?.reduce((s, o) => s + (o.total_amount || 0), 0) || 0), 0)
+  }), [users]);
+
+  // --- Logic: Filtering ---
+  const filteredUsers = useMemo(() => {
+    return users.filter(u => {
+      const searchStr = (u.full_name + u.email + u.phone).toLowerCase();
+      const matchesSearch = searchStr.includes(searchTerm.toLowerCase());
+      const matchesType = userTypeFilter === 'all' || u.user_type === userTypeFilter;
+      return matchesSearch && matchesType;
+    });
+  }, [users, searchTerm, userTypeFilter]);
+
+  // --- Actions ---
+  const handleUpdate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedUser) return;
+    
+    setIsUpdating(true);
+    try {
+      const { error } = await adminUserService.updateUser(selectedUser.id, editFormData);
+      if (error) throw error;
+
+      // Optimistic Update
+      setUsers(prev => prev.map(u => u.id === selectedUser.id ? { ...u, ...editFormData } : u));
+      toast({ title: "Updated ✅", description: "User details update ho gayi hain." });
+      setDialogs({ ...dialogs, edit: false });
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    } finally {
+      setIsUpdating(false);
+    }
   };
 
-  const getTotalSpent = (user: User) => {
-    return user.orders?.reduce((sum, order) => sum + (order.total_amount || 0), 0) || 0;
+  const handleDelete = async (user: User) => {
+    if (user.user_type === 'admin') return toast({ title: "Action Denied", description: "Admins ko yahan se delete nahi kiya ja sakta." });
+    if (!confirm(`Kya aap ${user.full_name || 'is user'} ko deactivate karna chahte hain?`)) return;
+
+    try {
+      await adminUserService.deactivateUser(user.id);
+      setUsers(prev => prev.filter(u => u.id !== user.id));
+      toast({ title: "Deactivated", description: "User account deactivate kar diya gaya." });
+    } catch (err: any) {
+      toast({ title: "Failed", description: err.message, variant: "destructive" });
+    }
   };
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="text-center">
-          <Users className="mx-auto h-12 w-12 text-gray-400" />
-          <h3 className="mt-2 text-sm font-medium text-gray-900">Loading users...</h3>
-        </div>
-      </div>
-    );
-  }
+  if (loading) return <div className="flex h-64 items-center justify-center"><Loader2 className="animate-spin text-primary" /></div>;
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold">User Management</h1>
-        <p className="text-gray-600">Manage customer accounts and user types</p>
+    <div className="space-y-6 p-4 md:p-6 animate-in fade-in duration-500">
+      <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div>
+          <h1 className="text-3xl font-extrabold tracking-tight">User Base</h1>
+          <p className="text-muted-foreground">Accounts aur permissions manage karein.</p>
+        </div>
+        <div className="flex gap-2 w-full md:w-auto">
+           <Input 
+             className="max-w-[300px] shadow-sm" 
+             placeholder="Search name, email..." 
+             value={searchTerm} 
+             onChange={e => setSearchTerm(e.target.value)} 
+           />
+           <Select value={userTypeFilter} onValueChange={setUserTypeFilter}>
+             <SelectTrigger className="w-[150px]"><SelectValue placeholder="Role" /></SelectTrigger>
+             <SelectContent>
+               <SelectItem value="all">All Roles</SelectItem>
+               <SelectItem value="buyer">Buyers</SelectItem>
+               <SelectItem value="wholeseller">Wholesalers</SelectItem>
+               <SelectItem value="admin">Admins</SelectItem>
+             </SelectContent>
+           </Select>
+        </div>
+      </header>
+
+      {/* Stats Grid */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <StatsCard title="Total Users" value={stats.total} icon={<Users size={20}/>} />
+        <StatsCard title="Buyers" value={stats.buyers} icon={<UserCheck className="text-blue-500" size={20}/>} />
+        <StatsCard title="Wholesalers" value={stats.wholesalers} icon={<ShoppingBag className="text-purple-500" size={20}/>} />
+        <StatsCard title="Total LT Revenue" value={`₹${stats.revenue.toLocaleString()}`} icon={<DollarSign className="text-green-600" size={20}/>} />
       </div>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Users</CardTitle>
-            <Users className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{userStats.totalUsers}</div>
-          </CardContent>
-        </Card>
-        
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Buyers</CardTitle>
-            <UserCheck className="h-4 w-4 text-blue-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-blue-600">{userStats.buyers}</div>
-          </CardContent>
-        </Card>
-        
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Wholesellers</CardTitle>
-            <ShoppingBag className="h-4 w-4 text-purple-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-purple-600">{userStats.wholesalers}</div>
-          </CardContent>
-        </Card>
-        
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Revenue</CardTitle>
-            <DollarSign className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">₹{userStats.totalSpent.toLocaleString()}</div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Filters */}
-      <Card>
-        <CardContent className="pt-6">
-          <div className="flex flex-col sm:flex-row gap-4">
-            <div className="flex-1">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-                <Input
-                  placeholder="Search by name, email, or phone..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10"
-                />
-              </div>
-            </div>
-            <Select value={userTypeFilter} onValueChange={setUserTypeFilter}>
-              <SelectTrigger className="w-[200px]">
-                <SelectValue placeholder="Filter by user type" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Users</SelectItem>
-                <SelectItem value="buyer">Buyers</SelectItem>
-                <SelectItem value="wholeseller">Wholesellers</SelectItem>
-                <SelectItem value="admin">Admins</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Users Table */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Users ({filteredUsers.length})</CardTitle>
-          <CardDescription>
-            Manage user accounts and their permissions
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>User</TableHead>
-                <TableHead>Type</TableHead>
-                <TableHead>Orders</TableHead>
-                <TableHead>Total Spent</TableHead>
-                <TableHead>Joined</TableHead>
-                <TableHead>Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredUsers.map((user) => (
-                <TableRow key={user.id}>
-                  <TableCell>
-                    <div className="flex items-center space-x-3">
-                      <Avatar>
-                        <AvatarFallback>
-                          {user.full_name?.charAt(0).toUpperCase() || user.email.charAt(0).toUpperCase()}
-                        </AvatarFallback>
-                      </Avatar>
-                      <div>
-                        <div className="font-medium">{user.full_name || 'No name'}</div>
-                        <div className="text-sm text-gray-500">{user.email}</div>
-                        {user.phone && (
-                          <div className="text-xs text-gray-400">{user.phone}</div>
-                        )}
-                      </div>
+      {/* Main Table Card */}
+      <Card className="border-none shadow-xl overflow-hidden">
+        <Table>
+          <TableHeader className="bg-muted/50">
+            <TableRow>
+              <TableHead>Customer Profile</TableHead>
+              <TableHead>Account Type</TableHead>
+              <TableHead className="hidden md:table-cell">LTV (Spent)</TableHead>
+              <TableHead className="text-right">Actions</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {filteredUsers.map((user) => (
+              <TableRow key={user.id} className="group hover:bg-muted/30 transition-colors">
+                <TableCell>
+                  <div className="flex items-center gap-3">
+                    <Avatar className="h-10 w-10 border-2 border-background shadow-sm">
+                      <AvatarImage src={user.avatar_url} />
+                      <AvatarFallback className="bg-primary/10 text-primary font-bold">{user.full_name[0] || 'U'}</AvatarFallback>
+                    </Avatar>
+                    <div className="flex flex-col">
+                      <span className="font-bold text-gray-900">{user.full_name || 'Unnamed'}</span>
+                      <span className="text-xs text-muted-foreground">{user.email}</span>
                     </div>
-                  </TableCell>
-                  <TableCell>
-                    <Badge className={getUserTypeColor(user.user_type)}>
-                      <div className="flex items-center space-x-1">
-                        {getUserTypeIcon(user.user_type)}
-                        <span className="capitalize">{user.user_type}</span>
-                      </div>
-                    </Badge>
-                  </TableCell>
-                  <TableCell>{user.orders?.length || 0}</TableCell>
-                  <TableCell>₹{getTotalSpent(user).toLocaleString()}</TableCell>
-                  <TableCell>{new Date(user.created_at).toLocaleDateString()}</TableCell>
-                  <TableCell>
-                    <div className="flex space-x-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => {
-                          setSelectedUser(user);
-                          setIsDetailDialogOpen(true);
-                        }}
-                      >
-                        <Eye className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => openEditDialog(user)}
-                      >
-                        <Edit className="h-4 w-4" />
-                      </Button>
-                      {user.user_type !== 'admin' && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => deleteUser(user.id)}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      )}
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-          
-          {filteredUsers.length === 0 && (
-            <div className="text-center py-12">
-              <Users className="mx-auto h-12 w-12 text-gray-400" />
-              <h3 className="mt-2 text-sm font-medium text-gray-900">No users found</h3>
-              <p className="mt-1 text-sm text-gray-500">
-                {searchTerm || userTypeFilter !== 'all' 
-                  ? 'Try adjusting your search or filter criteria' 
-                  : 'Users will appear here when they register'
-                }
-              </p>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* User Detail Dialog */}
-      <Dialog open={isDetailDialogOpen} onOpenChange={setIsDetailDialogOpen}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>User Details</DialogTitle>
-            <DialogDescription>
-              Complete user information and activity
-            </DialogDescription>
-          </DialogHeader>
-          
-          {selectedUser && (
-            <div className="space-y-6">
-              {/* User Basic Info */}
-              <div className="flex items-center space-x-4">
-                <Avatar className="h-16 w-16">
-                  <AvatarFallback className="text-lg">
-                    {selectedUser.full_name?.charAt(0).toUpperCase() || selectedUser.email.charAt(0).toUpperCase()}
-                  </AvatarFallback>
-                </Avatar>
-                <div>
-                  <h3 className="text-xl font-semibold">{selectedUser.full_name || 'No name'}</h3>
-                  <p className="text-gray-600">{selectedUser.email}</p>
-                  <Badge className={getUserTypeColor(selectedUser.user_type)}>
-                    <div className="flex items-center space-x-1">
-                      {getUserTypeIcon(selectedUser.user_type)}
-                      <span className="capitalize">{selectedUser.user_type}</span>
-                    </div>
+                  </div>
+                </TableCell>
+                <TableCell>
+                  <Badge variant="outline" className={`capitalize px-3 py-1 ${
+                    user.user_type === 'admin' ? 'border-red-200 bg-red-50 text-red-700' : 
+                    user.user_type === 'wholeseller' ? 'border-purple-200 bg-purple-50 text-purple-700' : 
+                    'border-blue-200 bg-blue-50 text-blue-700'
+                  }`}>
+                    {user.user_type}
                   </Badge>
-                </div>
-              </div>
-              
-              {/* Contact Information */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-lg">Contact Information</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <div className="flex items-center space-x-2">
-                    <Mail className="h-4 w-4 text-gray-400" />
-                    <span>{selectedUser.email}</span>
+                </TableCell>
+                <TableCell className="hidden md:table-cell font-medium">
+                  ₹{(user.orders?.reduce((s, o) => s + (o.total_amount || 0), 0) || 0).toLocaleString()}
+                </TableCell>
+                <TableCell className="text-right">
+                  <div className="flex justify-end gap-1">
+                    <Button variant="ghost" size="sm" onClick={() => { setSelectedUser(user); setDialogs({...dialogs, detail: true}); }}><Eye size={16}/></Button>
+                    <Button variant="ghost" size="sm" onClick={() => { 
+                      setSelectedUser(user); 
+                      setEditFormData({ full_name: user.full_name, phone: user.phone || '', user_type: user.user_type });
+                      setDialogs({...dialogs, edit: true}); 
+                    }}><Edit size={16}/></Button>
+                    <Button variant="ghost" size="sm" onClick={() => handleDelete(user)} className="text-red-500 hover:bg-red-50"><Trash2 size={16}/></Button>
                   </div>
-                  {selectedUser.phone && (
-                    <div className="flex items-center space-x-2">
-                      <Phone className="h-4 w-4 text-gray-400" />
-                      <span>{selectedUser.phone}</span>
-                    </div>
-                  )}
-                  <div className="flex items-center space-x-2">
-                    <MapPin className="h-4 w-4 text-gray-400" />
-                    <span>Member since {new Date(selectedUser.created_at).toLocaleDateString()}</span>
-                  </div>
-                </CardContent>
-              </Card>
-              
-              {/* Addresses */}
-              {selectedUser.user_addresses && selectedUser.user_addresses.length > 0 && (
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-lg">Addresses</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-3">
-                    {selectedUser.user_addresses.map((address) => (
-                      <div key={address.id} className="p-3 border rounded-lg">
-                        <div className="flex justify-between items-start">
-                          <div>
-                            <p className="font-medium">{address.address_line_1}</p>
-                            <p className="text-sm text-gray-600">
-                              {address.city}, {address.state} - {address.pincode}
-                            </p>
-                          </div>
-                          {address.is_default && (
-                            <Badge variant="secondary">Default</Badge>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                  </CardContent>
-                </Card>
-              )}
-              
-              {/* Order Summary */}
-              {selectedUser.orders && selectedUser.orders.length > 0 && (
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-lg">Recent Orders</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-2">
-                      {selectedUser.orders.slice(0, 5).map((order) => (
-                        <div key={order.id} className="flex justify-between items-center p-2 border rounded">
-                          <span>Order #{order.id.slice(-8)}</span>
-                          <span className="font-medium">₹{order.total_amount}</span>
-                          <Badge variant={order.status === 'delivered' ? 'default' : 'secondary'}>
-                            {order.status}
-                          </Badge>
-                        </div>
-                      ))}
-                    </div>
-                    <div className="mt-4 pt-4 border-t">
-                      <div className="flex justify-between items-center font-semibold">
-                        <span>Total Spent:</span>
-                        <span>₹{getTotalSpent(selectedUser).toLocaleString()}</span>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              )}
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+        {filteredUsers.length === 0 && (
+          <div className="py-20 text-center flex flex-col items-center gap-2">
+            <FilterX className="text-muted-foreground" size={40} />
+            <p className="text-muted-foreground">Koi user nahi mila. Filter reset karein.</p>
+          </div>
+        )}
+      </Card>
 
-      {/* Edit User Dialog */}
-      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-        <DialogContent>
+      {/* Edit User Modal */}
+      <Dialog open={dialogs.edit} onOpenChange={(o) => setDialogs({...dialogs, edit: o})}>
+        <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
-            <DialogTitle>Edit User</DialogTitle>
-            <DialogDescription>
-              Update user information and permissions
-            </DialogDescription>
+            <DialogTitle className="text-2xl font-bold">Edit Account</DialogTitle>
+            <DialogDescription>Profile info aur user role update karein.</DialogDescription>
           </DialogHeader>
-          <form onSubmit={handleEditUser} className="space-y-4">
+          <form onSubmit={handleUpdate} className="space-y-4 pt-4">
             <div className="space-y-2">
-              <Label htmlFor="full_name">Full Name</Label>
-              <Input
-                id="full_name"
-                value={editFormData.full_name}
-                onChange={(e) => setEditFormData({ ...editFormData, full_name: e.target.value })}
-                required
-              />
+              <Label>Full Name</Label>
+              <Input value={editFormData.full_name} onChange={e => setEditFormData({...editFormData, full_name: e.target.value})} required />
             </div>
-            
             <div className="space-y-2">
-              <Label htmlFor="phone">Phone Number</Label>
-              <Input
-                id="phone"
-                value={editFormData.phone}
-                onChange={(e) => setEditFormData({ ...editFormData, phone: e.target.value })}
-              />
+              <Label>Phone Number</Label>
+              <Input value={editFormData.phone} onChange={e => setEditFormData({...editFormData, phone: e.target.value})} />
             </div>
-            
             <div className="space-y-2">
-              <Label htmlFor="user_type">User Type</Label>
-              <Select 
-                value={editFormData.user_type} 
-                onValueChange={(value: 'buyer' | 'wholeseller' | 'admin') => 
-                  setEditFormData({ ...editFormData, user_type: value })
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
+              <Label>User Role</Label>
+              <Select value={editFormData.user_type} onValueChange={v => setEditFormData({...editFormData, user_type: v})}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="buyer">Buyer</SelectItem>
-                  <SelectItem value="wholeseller">Wholeseller</SelectItem>
-                  <SelectItem value="admin">Admin</SelectItem>
+                  <SelectItem value="buyer">Buyer (Default)</SelectItem>
+                  <SelectItem value="wholeseller">Wholesaler</SelectItem>
+                  <SelectItem value="admin">Administrator</SelectItem>
                 </SelectContent>
               </Select>
             </div>
-            
-            <div className="flex justify-end space-x-2">
-              <Button type="button" variant="outline" onClick={() => setIsEditDialogOpen(false)}>
-                Cancel
-              </Button>
-              <Button type="submit">Update User</Button>
-            </div>
+            <Button type="submit" className="w-full h-11" disabled={isUpdating}>
+              {isUpdating ? <Loader2 className="animate-spin mr-2" /> : <Shield className="mr-2" size={16}/>}
+              Update Account Permissions
+            </Button>
           </form>
         </DialogContent>
       </Dialog>
     </div>
+  );
+}
+
+// --- Sub-Components ---
+function StatsCard({ title, value, icon }: any) {
+  return (
+    <Card className="border-none shadow-sm bg-muted/20 hover:bg-muted/40 transition-colors">
+      <CardContent className="p-6 flex items-center justify-between">
+        <div>
+          <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">{title}</p>
+          <h3 className="text-2xl font-black mt-1">{value}</h3>
+        </div>
+        <div className="p-3 bg-background rounded-2xl shadow-sm">{icon}</div>
+      </CardContent>
+    </Card>
   );
 }

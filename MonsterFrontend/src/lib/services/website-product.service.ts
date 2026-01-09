@@ -1,6 +1,16 @@
 import { supabase } from '@/lib/supabase';
 
 /**
+ * Helper function to add timeout to promises
+ */
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number = 15000): Promise<T> {
+  const timeoutPromise = new Promise<never>((_, reject) => 
+    setTimeout(() => reject(new Error('Request timeout: Query took too long')), timeoutMs)
+  );
+  return Promise.race([promise, timeoutPromise]);
+}
+
+/**
  * Website Product Service
  * Provides products to the main website (buyer/wholeseller sections)
  * Only shows active products from admin
@@ -112,7 +122,8 @@ export class WebsiteProductService {
       query = query.order('is_featured', { ascending: false })
                    .order('created_at', { ascending: false });
 
-      const { data, error, count } = await query;
+      // Execute query with timeout
+      const { data, error, count } = await withTimeout(query);
 
       if (error) {
         throw new Error(`Failed to fetch products: ${error.message}`);
@@ -134,7 +145,7 @@ export class WebsiteProductService {
    */
   static async getProduct(id: string): Promise<WebsiteProduct | null> {
     try {
-      const { data, error } = await supabase
+      const queryBuilder = supabase
         .from('products')
         .select(`
           *,
@@ -144,6 +155,8 @@ export class WebsiteProductService {
         .eq('id', id)
         .eq('is_active', true)
         .single();
+
+      const { data, error } = await withTimeout(queryBuilder);
 
       if (error) {
         if (error.code === 'PGRST116') {
@@ -193,7 +206,7 @@ export class WebsiteProductService {
    */
   static async getFeaturedProducts(limit = 8): Promise<WebsiteProduct[]> {
     try {
-      const { data, error } = await supabase
+      const queryBuilder = supabase
         .from('products')
         .select(`
           *,
@@ -204,6 +217,8 @@ export class WebsiteProductService {
         .eq('is_active', true)
         .order('created_at', { ascending: false })
         .limit(limit);
+
+      const { data, error } = await withTimeout(queryBuilder);
 
       if (error) {
         throw new Error(`Failed to fetch featured products: ${error.message}`);
@@ -239,10 +254,12 @@ export class WebsiteProductService {
         console.warn('Gender column not found, fetching all products');
       }
 
-      const { data, error } = await query
+      const finalQuery = query
         .order('is_featured', { ascending: false })
         .order('created_at', { ascending: false })
         .limit(limit);
+
+      const { data, error } = await withTimeout(finalQuery);
 
       if (error) {
         throw new Error(`Failed to fetch products by gender: ${error.message}`);
