@@ -1,4 +1,4 @@
-name: CI
+name: Monorepo CI
 
 on:
   push:
@@ -7,17 +7,78 @@ on:
     branches: [ master ]
 
 jobs:
-  test:
+  detect-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      frontend: ${{ steps.filter.outputs.frontend }}
+      backend: ${{ steps.filter.outputs.backend }}
+      supabase: ${{ steps.filter.outputs.supabase }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            frontend:
+              - 'MonsterFrontend/**'
+            backend:
+              - 'MonsterBackend/**'
+            supabase:
+              - 'supabase/**'
+
+  frontend:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.frontend == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Use Node.js
-        uses: actions/setup-node@v4
+
+      - uses: actions/setup-node@v4
         with:
-          node-version: '22.16.0'
-      - name: Install dependencies
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: MonsterFrontend/package-lock.json
+
+      - name: Install frontend deps
         run: npm ci
         working-directory: MonsterFrontend
-      - name: Run tests
-        run: npx vitest run --config MonsterFrontend/vite.test.config.ts
+
+      - name: Run frontend tests
+        run: npx vitest run
         working-directory: MonsterFrontend
+
+  backend:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.backend == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: MonsterBackend/package-lock.json
+
+      - name: Install backend deps
+        run: npm ci
+        working-directory: MonsterBackend
+
+      - name: Run backend tests
+        run: npm test --if-present
+        working-directory: MonsterBackend
+
+  supabase:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.supabase == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@v1
+
+      - name: Supabase check
+        run: |
+          echo "Supabase folder detected"
+          ls supabase
